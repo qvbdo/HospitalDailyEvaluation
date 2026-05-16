@@ -210,6 +210,19 @@ body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);
 .toast{position:fixed;bottom:22px;right:22px;background:#2c3e50;color:#fff;padding:9px 16px;border-radius:8px;font-size:13px;z-index:300;opacity:0;transition:opacity .3s;pointer-events:none}
 .toast.show{opacity:1}
  
+/* OFFLINE BANNER */
+.offline-banner{display:none;background:#e67e22;color:#fff;padding:8px 18px;font-size:13px;font-weight:600;text-align:center;align-items:center;justify-content:center;gap:8px;position:sticky;top:0;z-index:50}
+.offline-banner.show{display:flex}
+.offline-reconnect{background:rgba(255,255,255,.25);border:none;color:#fff;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:700}
+.offline-reconnect:hover{background:rgba(255,255,255,.4)}
+ 
+/* OFFLINE LOGIN OPTION */
+.offline-login-btn{display:none;align-items:center;justify-content:center;gap:10px;width:100%;padding:12px 20px;background:#e67e22;border:none;border-radius:10px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;margin-top:10px;transition:all .2s}
+.offline-login-btn:hover{background:#d35400}
+.offline-login-btn.show{display:flex}
+.offline-sep{margin:12px 0;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.offline-sep::before,.offline-sep::after{content:'';flex:1;height:1px;background:var(--border)}
+ 
 /* LOADING */
 .loading-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg);flex-direction:column;gap:14px}
 .spinner{width:40px;height:40px;border:4px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite}
@@ -294,12 +307,21 @@ body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);
       <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
       تسجيل الدخول بـ Google
     </button>
+    <div class="offline-sep" id="offlineSep" style="display:none">أو</div>
+    <button class="offline-login-btn" id="offlineLoginBtn" onclick="enterOfflineMode()">
+      📴 الدخول بدون إنترنت (الوضع غير المتصل)
+    </button>
     <div class="login-err" id="loginErr">حدث خطأ في تسجيل الدخول. حاول مرة أخرى.</div>
   </div>
 </div>
  
 <!-- APP -->
 <div id="appRoot" style="display:none">
+  <!-- OFFLINE BANNER -->
+  <div class="offline-banner" id="offlineBanner">
+    <span>📴 وضع غير متصل — البيانات محفوظة محلياً فقط</span>
+    <button class="offline-reconnect" onclick="tryReconnect()">🔄 إعادة الاتصال</button>
+  </div>
   <div class="hdr" id="hdrEl">
     <div class="hdr-top">
       <h1>📋 تقييم الممارسة اليومية في المستشفى</h1>
@@ -523,6 +545,179 @@ var auth = firebase.auth();
 var db   = firebase.database();
  
 // ═══════════════════════════════════════════
+// OFFLINE MODE
+// ═══════════════════════════════════════════
+var isOfflineMode = false;  // true when user chose offline login or network is gone
+ 
+// Called on page load — check connectivity and show offline login if needed
+function initConnectivityCheck(){
+  if(!navigator.onLine){
+    showOfflineLoginOption();
+  }
+  window.addEventListener('online',  onNetworkOnline);
+  window.addEventListener('offline', onNetworkOffline);
+}
+ 
+function showOfflineLoginOption(){
+  var btn = document.getElementById('offlineLoginBtn');
+  var sep = document.getElementById('offlineSep');
+  if(btn){ btn.classList.add('show'); }
+  if(sep){ sep.style.display='flex'; }
+}
+ 
+function hideOfflineLoginOption(){
+  var btn = document.getElementById('offlineLoginBtn');
+  var sep = document.getElementById('offlineSep');
+  if(btn){ btn.classList.remove('show'); }
+  if(sep){ sep.style.display='none'; }
+}
+ 
+function onNetworkOnline(){
+  if(isOfflineMode){
+    // Show a toast but don't force anything — let user choose to reconnect
+    toast('🌐 اتصال الإنترنت متاح. اضغط "إعادة الاتصال" للمزامنة.');
+    document.getElementById('offlineBanner').innerHTML =
+      '<span>🌐 الإنترنت متاح الآن!</span>'
+      +'<button class="offline-reconnect" onclick="tryReconnect()">🔄 تسجيل الدخول ومزامنة البيانات</button>';
+    document.getElementById('offlineBanner').classList.add('show');
+  } else {
+    hideOfflineLoginOption();
+  }
+}
+ 
+function onNetworkOffline(){
+  if(!isOfflineMode && currentUser){
+    // Was logged in online, now lost connection — switch to offline banner
+    setSyncStatus('offline');
+    document.getElementById('offlineBanner').classList.add('show');
+  } else if(!isOfflineMode){
+    // On login screen, show offline option
+    showOfflineLoginOption();
+  }
+}
+ 
+// User clicked "Enter without internet"
+function enterOfflineMode(){
+  // Find the most recently cached session in localStorage
+  var found = false;
+  for(var i=0; i<localStorage.length; i++){
+    var k = localStorage.key(i);
+    if(k && k.startsWith('hsp_')){
+      var uid = k.replace('hsp_','');
+      if(loadFromCache(uid)){
+        found = true;
+        break;
+      }
+    }
+  }
+  if(!found){
+    // No cache at all — still enter offline mode with empty data
+    enterOfflineModeWithUid('offline_user');
+  }
+}
+ 
+function loadFromCache(uid){
+  try{
+    var raw = localStorage.getItem('hsp_'+uid);
+    if(!raw) return false;
+    var c = JSON.parse(raw);
+    studentsMorning = c.sm||[];
+    studentsEvening = c.se||[];
+    history         = c.h||{};
+    roster          = c.r||[];
+    // Restore settings fields
+    if(c.hn) document.getElementById('hName').value  = c.hn;
+    if(c.ho) document.getElementById('hNo').value    = c.ho;
+    if(c.sn) document.getElementById('supName').value= c.sn;
+    enterOfflineModeWithUid(uid);
+    return true;
+  }catch(e){ return false; }
+}
+ 
+function enterOfflineModeWithUid(uid){
+  isOfflineMode = true;
+  currentUser = { uid: uid, displayName: 'وضع غير متصل', photoURL: null, email: '' };
+  dataLoaded = true;
+ 
+  // Show app
+  document.getElementById('loginScreen').style.display   = 'none';
+  document.getElementById('appRoot').style.display       = 'block';
+  document.getElementById('hdrEl').style.display         = 'block';
+  document.getElementById('appBody').style.display       = 'block';
+  document.getElementById('userAvatar').src              = '';
+  document.getElementById('userName').textContent        = '📴 غير متصل';
+ 
+  // Show offline banner
+  document.getElementById('offlineBanner').classList.add('show');
+  setSyncStatus('offline');
+ 
+  renderList();
+  document.getElementById('clrRBtn').style.display = (roster&&roster.length>0)?'':'none';
+}
+ 
+// User pressed "Reconnect" button
+function tryReconnect(){
+  if(navigator.onLine){
+    isOfflineMode = false;
+    currentUser = null;
+    studentsMorning=[]; studentsEvening=[]; history={}; roster=[];
+    document.getElementById('offlineBanner').classList.remove('show');
+    document.getElementById('appRoot').style.display  = 'none';
+    document.getElementById('hdrEl').style.display    = 'none';
+    document.getElementById('appBody').style.display  = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+    toast('يرجى تسجيل الدخول للمزامنة');
+  } else {
+    toast('لا يوجد اتصال بالإنترنت حالياً');
+  }
+}
+ 
+// Override saveStudents / saveDay / saveRoster / saveSettings
+// so they write to localStorage in offline mode instead of Firebase
+function saveStudents(){
+  if(!dataLoaded||!currentUser) return;
+  if(isOfflineMode){ cacheLocally(); toast('💾 محفوظ محلياً'); return; }
+  setSyncStatus('saving');
+  var key = curGroup==='morning'?'students_morning':'students_evening';
+  dbRef(key).set(getStudents())
+    .then(function(){ setSyncStatus('saved'); cacheLocally(); })
+    .catch(function(e){ setSyncStatus('offline'); console.error(e); });
+}
+ 
+function saveDay(sessionK){
+  if(!dataLoaded||!currentUser) return;
+  if(isOfflineMode){ cacheLocally(); return; }
+  setSyncStatus('saving');
+  var dayData = history[sessionK]||{};
+  var dbKey = sessionK.replace(/^(\d{4})-(\d{2})-(\d{2})_/, '$1_$2_$3_');
+  dbRef('history/'+dbKey).set(dayData)
+    .then(function(){ setSyncStatus('saved'); cacheLocally(); })
+    .catch(function(e){ setSyncStatus('offline'); console.error(e); });
+}
+ 
+function saveRoster(){
+  if(!dataLoaded||!currentUser) return;
+  if(isOfflineMode){ cacheLocally(); return; }
+  setSyncStatus('saving');
+  dbRef('roster').set(roster)
+    .then(function(){ setSyncStatus('saved'); cacheLocally(); })
+    .catch(function(e){ setSyncStatus('offline'); console.error(e); });
+}
+ 
+function saveSettings(){
+  if(!currentUser) return;
+  if(isOfflineMode){ cacheLocally(); return; }
+  var s = {
+    hospitalName:   document.getElementById('hName').value||'',
+    hospitalNo:     document.getElementById('hNo').value||'',
+    supervisorName: document.getElementById('supName').value||''
+  };
+  dbRef('settings').set(s)
+    .then(function(){ setSyncStatus('saved'); })
+    .catch(function(e){ setSyncStatus('offline'); });
+}
+ 
+// ═══════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════
 // students_morning / students_evening stored separately
@@ -576,6 +771,21 @@ function signIn(){
 }
  
 function confirmSignOut(){
+  if(isOfflineMode){
+    if(confirm('الخروج من الوضع غير المتصل؟')) {
+      isOfflineMode = false;
+      currentUser = null;
+      studentsMorning=[]; studentsEvening=[]; history={}; roster=[];
+      document.getElementById('sList').innerHTML='';
+      document.getElementById('hName').value='';
+      document.getElementById('hNo').value='';
+      document.getElementById('supName').value='';
+      document.getElementById('offlineBanner').classList.remove('show');
+      document.getElementById('loginScreen').style.display='flex';
+      document.getElementById('appRoot').style.display='none';
+    }
+    return;
+  }
   if(confirm('هل تريد تسجيل الخروج؟')) auth.signOut();
 }
  
@@ -605,6 +815,8 @@ auth.onAuthStateChanged(function(user){
     document.getElementById('supName').value='';
     document.getElementById('loginScreen').style.display='flex';
     document.getElementById('appRoot').style.display='none';
+    document.getElementById('offlineBanner').classList.remove('show');
+    isOfflineMode = false;
   }
 });
  
@@ -716,48 +928,8 @@ function renderRosterIfActive(){
 }
  
 // ═══════════════════════════════════════════
-// SAVE FUNCTIONS — each saves its own node
+// SAVE FUNCTIONS — handled above with offline support
 // ═══════════════════════════════════════════
-function saveStudents(){
-  if(!dataLoaded||!currentUser) return;
-  setSyncStatus('saving');
-  var key = curGroup==='morning'?'students_morning':'students_evening';
-  dbRef(key).set(getStudents())
-    .then(function(){ setSyncStatus('saved'); cacheLocally(); })
-    .catch(function(e){ setSyncStatus('offline'); console.error(e); });
-}
- 
-function saveDay(sessionK){
-  // sessionK = "2025-03-03_morning"
-  if(!dataLoaded||!currentUser) return;
-  setSyncStatus('saving');
-  var dayData = history[sessionK]||{};
-  // Convert to valid DB key: "2025_03_03_morning"
-  var dbKey = sessionK.replace(/^(\d{4})-(\d{2})-(\d{2})_/, '$1_$2_$3_');
-  dbRef('history/'+dbKey).set(dayData)
-    .then(function(){ setSyncStatus('saved'); cacheLocally(); })
-    .catch(function(e){ setSyncStatus('offline'); console.error(e); });
-}
- 
-function saveRoster(){
-  if(!dataLoaded||!currentUser) return;
-  setSyncStatus('saving');
-  dbRef('roster').set(roster)
-    .then(function(){ setSyncStatus('saved'); cacheLocally(); })
-    .catch(function(e){ setSyncStatus('offline'); console.error(e); });
-}
- 
-function saveSettings(){
-  if(!currentUser) return;
-  var s = {
-    hospitalName:   document.getElementById('hName').value||'',
-    hospitalNo:     document.getElementById('hNo').value||'',
-    supervisorName: document.getElementById('supName').value||''
-  };
-  dbRef('settings').set(s)
-    .then(function(){ setSyncStatus('saved'); })
-    .catch(function(e){ setSyncStatus('offline'); });
-}
  
 function cacheLocally(){
   if(!currentUser) return;
@@ -1450,6 +1622,7 @@ function printAttSheet(){
 }
  
 tick(); setInterval(tick,1000);
+initConnectivityCheck();
  
 </script>
 </body>
