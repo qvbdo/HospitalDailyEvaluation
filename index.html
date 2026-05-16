@@ -1346,21 +1346,23 @@ function renderHist(){
   el.innerHTML=html;
 }
  
+var ddDateKey = '';
 function openDayDetail(date){
+  ddDateKey = date;
   var dayData=history[date]||{};
   var dnames=['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
-  var dobj=new Date(date+'T00:00:00');
   var isM2=date.indexOf('_morning')>=0, grpT=isM2?'صباحي':'مسائي', cleanD2=date.replace('_morning','').replace('_evening',''), dobj2=new Date(cleanD2+'T00:00:00');
+  var ddStsList = isM2 ? studentsMorning : studentsEvening;
   document.getElementById('dmTitle').textContent='تفاصيل يوم: '+cleanD2+' — '+dnames[dobj2.getDay()]+' ('+grpT+')';
   var html='';
-  for(var i=0;i<students.length;i++){
+  for(var i=0;i<ddStsList.length;i++){
     var r=dayData[i]||{}, sc=r.scores||{};
     var att=r.attendance==='present'?'حاضر ✓':r.attendance==='absent'?'غائب ✗':'—';
     var attColor=r.attendance==='present'?'var(--success)':r.attendance==='absent'?'var(--danger)':'var(--muted)';
     var pd=r.paperDelivered===true?'سلّم ✓':r.paperDelivered===false?'لم يسلّم ✗':'—';
     var pdColor=r.paperDelivered===true?'var(--success)':r.paperDelivered===false?'var(--danger)':'var(--muted)';
     html+='<div class="dm-student-card"><div class="dm-st-hdr">';
-    html+='<div class="dm-st-name">'+(i+1)+'. '+ddSts[i].name+'</div>';
+    html+='<div class="dm-st-name">'+(i+1)+'. '+ddStsList[i].name+'</div>';
     html+='<div class="dm-st-meta"><span style="font-size:13px;font-weight:600;color:'+attColor+'">'+att+'</span>';
     html+='<span style="font-size:13px;font-weight:600;color:'+pdColor+'">'+pd+'</span>';
     if(r.total!==undefined) html+='<span class="dm-score-big">'+r.total.toFixed(2)+' / 15</span>';
@@ -1393,15 +1395,18 @@ function openStudentDetail(date,idx){
 function exportDayExcel(){
   var title=document.getElementById('dmTitle').textContent;
   var date=title.replace('تفاصيل يوم: ','').split(' — ')[0].trim();
-  var dayData=history[date]||{};
+  // Determine which group's students to use based on the full history key stored in ddDateKey
+  var histKey = typeof ddDateKey !== 'undefined' ? ddDateKey : (date+'_'+(date.indexOf('_morning')>=0?'morning':'evening'));
+  var dayData=history[histKey]||{};
+  var ddStsList = histKey.indexOf('_morning')>=0 ? studentsMorning : studentsEvening;
   var wb=XLSX.utils.book_new();
   var hN=document.getElementById('hName').value||'', sup=document.getElementById('supName').value||'';
   var rows=[['المشرف: '+sup,'المستشفى: '+hN,'التاريخ: '+date],[],['م','اسم الطالب','الحضور','الملاحظة اليومية','م.جماعية','م.حالة','الطاقم','الطالب','المعلم','المريض','التأخر','الاجتماع','الموقع','الأوامر','الشارة','الحجاب','الزي','المعطف','المجموع','تسليم الورقة','ملاحظات']];
-  for(var i=0;i<students.length;i++){
+  for(var i=0;i<ddStsList.length;i++){
     var r=dayData[i]||{}, sc=r.scores||{};
     var att=r.attendance==='present'?'حاضر':r.attendance==='absent'?'غائب':'—';
     var pd=r.paperDelivered===true?'سلّم':r.paperDelivered===false?'لم يسلّم':'—';
-    rows.push([i+1,sts[i].name,att,sc.dailynote||0,sc.gdisc||0,sc.cdisc||0,sc.staff||0,sc.std||0,sc.tchr||0,sc.pat||0,sc.late||0,sc.meet||0,sc.loc||0,sc.ord||0,sc.badge||0,sc.veil||0,sc.uni||0,sc.coat||0,r.total!==undefined?r.total.toFixed(2):0,pd,r.notes||'']);
+    rows.push([i+1,ddStsList[i].name,att,sc.dailynote||0,sc.gdisc||0,sc.cdisc||0,sc.staff||0,sc.std||0,sc.tchr||0,sc.pat||0,sc.late||0,sc.meet||0,sc.loc||0,sc.ord||0,sc.badge||0,sc.veil||0,sc.uni||0,sc.coat||0,r.total!==undefined?r.total.toFixed(2):0,pd,r.notes||'']);
   }
   var ws=XLSX.utils.aoa_to_sheet(rows); XLSX.utils.book_append_sheet(wb,ws,'تقييم '+date);
   XLSX.writeFile(wb,'تقييم_'+date+'.xlsx'); toast('تم تصدير Excel ✓');
@@ -1440,7 +1445,7 @@ function doExcel(){
     var rec=day[i]||{}, sc=rec.scores||{};
     var att=rec.attendance==='present'?'حاضر':rec.attendance==='absent'?'غائب':'—';
     var pd=rec.paperDelivered===true?'سلّم':rec.paperDelivered===false?'لم يسلّم':'—';
-    rows.push([i+1,students[i].name,att,sc.dailynote||0,sc.gdisc||0,sc.cdisc||0,sc.staff||0,sc.std||0,sc.tchr||0,sc.pat||0,sc.late||0,sc.meet||0,sc.loc||0,sc.ord||0,sc.badge||0,sc.veil||0,sc.uni||0,sc.coat||0,rec.total!==undefined?rec.total.toFixed(2):0,pd,rec.notes||'']);
+    rows.push([i+1,sts[i].name,att,sc.dailynote||0,sc.gdisc||0,sc.cdisc||0,sc.staff||0,sc.std||0,sc.tchr||0,sc.pat||0,sc.late||0,sc.meet||0,sc.loc||0,sc.ord||0,sc.badge||0,sc.veil||0,sc.uni||0,sc.coat||0,rec.total!==undefined?rec.total.toFixed(2):0,pd,rec.notes||'']);
   }
   var ws=XLSX.utils.aoa_to_sheet(rows); XLSX.utils.book_append_sheet(wb,ws,'التقييم اليومي');
   XLSX.writeFile(wb,'تقييم_'+curDate+'.xlsx'); toast('تم تصدير Excel ✓');
