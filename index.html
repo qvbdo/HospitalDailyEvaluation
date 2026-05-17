@@ -131,6 +131,14 @@ body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);
 .erow input[type=range]{flex:1;accent-color:var(--primary)}
 .eval{font-size:14px;font-weight:700;color:var(--primary);min-width:32px;text-align:left}
 .eml{font-size:11px;color:var(--muted)}
+/* Checkbox items (0.25 scoring) */
+.eck-wrap{display:flex;align-items:center;gap:10px;padding:4px 0}
+.eck{appearance:none;-webkit-appearance:none;width:22px;height:22px;border:2px solid var(--border);border-radius:5px;cursor:pointer;flex-shrink:0;transition:all .15s;position:relative;background:#fff}
+.eck:checked{background:var(--success);border-color:var(--success)}
+.eck:checked::after{content:'✓';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:14px;font-weight:700}
+.eck:hover{border-color:var(--accent)}
+.eck-val{font-size:13px;font-weight:600;color:var(--success);min-width:36px}
+.eck-max{font-size:11px;color:var(--muted)}
 .tbar{background:var(--primary);color:#fff;border-radius:var(--r);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;margin-top:13px}
 .tbar .tl{font-size:13px;opacity:.85}
 .tbar .tv{font-size:28px;font-weight:800}
@@ -1166,14 +1174,23 @@ function openEval(idx){
     html+='<div class="egrid">';
     for(var ii=0;ii<f.items.length;ii++){
       var it=f.items[ii], v=sc[it.k]!==undefined?sc[it.k]:0;
-      var step=it.m<=0.5?0.25:it.m<=1?0.25:0.5;
-      html+='<div class="eitem"><label>'+it.l+'</label><div class="erow">';
-      html+='<input type="range" min="0" max="'+it.m+'" step="'+step+'" value="'+v+'" id="f_'+it.k+'" oninput="upd(\''+it.k+'\',this.value)">';
-      html+='<span class="eval" id="v_'+it.k+'">'+parseFloat(v).toFixed(2)+'</span>';
-      html+='<span class="eml">/'+it.m+'</span>';
-      html+='</div></div>';
-    }
-    html+='</div></div>';
+      if(it.m===0.25){
+        var chk=parseFloat(v)===0.25;
+        html+='<div class="eitem"><div class="eck-wrap">';
+        html+='<input type="checkbox" class="eck" id="f_'+it.k+'"'+(chk?' checked':'')+' onchange="updCk(\''+it.k+'\',this.checked)">';
+        html+='<label for="f_'+it.k+'" style="cursor:pointer;font-size:14px">'+it.l+'</label>';
+        html+='<span class="eck-val" id="v_'+it.k+'">'+(chk?'0.25':'0.00')+'</span>';
+        html+='<span class="eck-max">/ 0.25</span>';
+        html+='</div></div>';
+      } else {
+        var step=it.m<=1?0.25:0.5;
+        html+='<div class="eitem"><label>'+it.l+'</label><div class="erow">';
+        html+='<input type="range" min="0" max="'+it.m+'" step="'+step+'" value="'+v+'" id="f_'+it.k+'" oninput="upd(\''+it.k+'\',this.value)">';
+        html+='<span class="eval" id="v_'+it.k+'">'+parseFloat(v).toFixed(2)+'</span>';
+        html+='<span class="eml">/'+it.m+'</span>';
+        html+='</div></div>';
+      }
+    }    html+='</div></div>';
   }
   html+='<div class="tbar"><span class="tl">المجموع الكلي</span><div style="display:flex;align-items:baseline;gap:5px"><span class="tv" id="mTot">'+(rec.total!==undefined?rec.total.toFixed(2):'0.00')+'</span><span class="tm">/ 15</span></div></div>';
   html+='<div class="narea"><label>ملاحظات:</label><textarea id="eNotes">'+(rec.notes||'')+'</textarea></div>';
@@ -1192,14 +1209,23 @@ function setEvalPaper(idx,val){
 }
  
 function upd(k,v){var el=document.getElementById('v_'+k);if(el)el.textContent=parseFloat(v).toFixed(2);recalc();}
+function updCk(k,checked){
+  var el=document.getElementById('v_'+k);
+  if(el)el.textContent=checked?'0.25':'0.00';
+  recalc();
+}
  
 function recalc(){
   var t=0;
   for(var fi=0;fi<FIELDS.length;fi++){
     var sec=0;
     for(var ii=0;ii<FIELDS[fi].items.length;ii++){
-      var el=document.getElementById('f_'+FIELDS[fi].items[ii].k);
-      if(el){var v=parseFloat(el.value)||0; sec+=v; t+=v;}
+      var it=FIELDS[fi].items[ii];
+      var el=document.getElementById('f_'+it.k);
+      if(el){
+        var v=it.m===0.25?(el.checked?0.25:0):parseFloat(el.value)||0;
+        sec+=v; t+=v;
+      }
     }
     var sel=document.getElementById('sectot_'+fi);
     if(sel) sel.textContent=sec.toFixed(2);
@@ -1210,7 +1236,14 @@ function recalc(){
 function saveEval(){
   var day=getSession(); if(!day[curSt])day[curSt]={};
   var rec=day[curSt]; rec.scores={}; var t=0;
-  for(var fi=0;fi<FIELDS.length;fi++) for(var ii=0;ii<FIELDS[fi].items.length;ii++){var el=document.getElementById('f_'+FIELDS[fi].items[ii].k);if(el){var v=parseFloat(el.value)||0;rec.scores[FIELDS[fi].items[ii].k]=v;t+=v;}}
+  for(var fi=0;fi<FIELDS.length;fi++) for(var ii=0;ii<FIELDS[fi].items.length;ii++){
+    var it=FIELDS[fi].items[ii];
+    var el=document.getElementById('f_'+it.k);
+    if(el){
+      var v=it.m===0.25?(el.checked?0.25:0):parseFloat(el.value)||0;
+      rec.scores[it.k]=v; t+=v;
+    }
+  }
   rec.total=Math.min(t,15); rec.notes=document.getElementById('eNotes').value; rec.evaluated=true;
   saveDay(sessionKey()); closeMod(); renderList(); toast('تم حفظ التقييم ✓');
 }
@@ -1396,20 +1429,21 @@ function renderHist(){
 }
  
 function openDayDetail(date){
+  ddDateKey=date;
   var dayData=history[date]||{};
+  var ddStsList=date.indexOf('_morning')>=0?studentsMorning:studentsEvening;
   var dnames=['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
-  var dobj=new Date(date+'T00:00:00');
   var isM2=date.indexOf('_morning')>=0, grpT=isM2?'صباحي':'مسائي', cleanD2=date.replace('_morning','').replace('_evening',''), dobj2=new Date(cleanD2+'T00:00:00');
   document.getElementById('dmTitle').textContent='تفاصيل يوم: '+cleanD2+' — '+dnames[dobj2.getDay()]+' ('+grpT+')';
   var html='';
-  for(var i=0;i<students.length;i++){
+  for(var i=0;i<ddStsList.length;i++){
     var r=dayData[i]||{}, sc=r.scores||{};
     var att=r.attendance==='present'?'حاضر ✓':r.attendance==='absent'?'غائب ✗':'—';
     var attColor=r.attendance==='present'?'var(--success)':r.attendance==='absent'?'var(--danger)':'var(--muted)';
     var pd=r.paperDelivered===true?'سلّم ✓':r.paperDelivered===false?'لم يسلّم ✗':'—';
     var pdColor=r.paperDelivered===true?'var(--success)':r.paperDelivered===false?'var(--danger)':'var(--muted)';
     html+='<div class="dm-student-card"><div class="dm-st-hdr">';
-    html+='<div class="dm-st-name">'+(i+1)+'. '+ddSts[i].name+'</div>';
+    html+='<div class="dm-st-name">'+(i+1)+'. '+ddStsList[i].name+'</div>';
     html+='<div class="dm-st-meta"><span style="font-size:13px;font-weight:600;color:'+attColor+'">'+att+'</span>';
     html+='<span style="font-size:13px;font-weight:600;color:'+pdColor+'">'+pd+'</span>';
     if(r.total!==undefined) html+='<span class="dm-score-big">'+r.total.toFixed(2)+' / 15</span>';
@@ -1439,21 +1473,23 @@ function openStudentDetail(date,idx){
   },120);
 }
  
+var ddDateKey='';
 function exportDayExcel(){
-  var title=document.getElementById('dmTitle').textContent;
-  var date=title.replace('تفاصيل يوم: ','').split(' — ')[0].trim();
-  var dayData=history[date]||{};
+  var histKey=ddDateKey;
+  var cleanDate=histKey.replace('_morning','').replace('_evening','');
+  var dayData=history[histKey]||{};
+  var ddStsList=histKey.indexOf('_morning')>=0?studentsMorning:studentsEvening;
   var wb=XLSX.utils.book_new();
   var hN=document.getElementById('hName').value||'', sup=document.getElementById('supName').value||'';
-  var rows=[['المشرف: '+sup,'المستشفى: '+hN,'التاريخ: '+date],[],['م','اسم الطالب','الحضور','الملاحظة اليومية','م.جماعية','م.حالة','الطاقم','الطالب','المعلم','المريض','التأخر','الاجتماع','الموقع','الأوامر','الشارة','الحجاب','الزي','المعطف','المجموع','تسليم الورقة','ملاحظات']];
-  for(var i=0;i<students.length;i++){
+  var rows=[['المشرف: '+sup,'المستشفى: '+hN,'التاريخ: '+cleanDate],[],['م','اسم الطالب','الحضور','الملاحظة اليومية','م.جماعية','م.حالة','الطاقم','الطالب','المعلم','المريض','التأخر','الاجتماع','الموقع','الأوامر','الشارة','الحجاب','الزي','المعطف','المجموع','تسليم الورقة','ملاحظات']];
+  for(var i=0;i<ddStsList.length;i++){
     var r=dayData[i]||{}, sc=r.scores||{};
     var att=r.attendance==='present'?'حاضر':r.attendance==='absent'?'غائب':'—';
     var pd=r.paperDelivered===true?'سلّم':r.paperDelivered===false?'لم يسلّم':'—';
-    rows.push([i+1,sts[i].name,att,sc.dailynote||0,sc.gdisc||0,sc.cdisc||0,sc.staff||0,sc.std||0,sc.tchr||0,sc.pat||0,sc.late||0,sc.meet||0,sc.loc||0,sc.ord||0,sc.badge||0,sc.veil||0,sc.uni||0,sc.coat||0,r.total!==undefined?r.total.toFixed(2):0,pd,r.notes||'']);
+    rows.push([i+1,ddStsList[i].name,att,sc.dailynote||0,sc.gdisc||0,sc.cdisc||0,sc.staff||0,sc.std||0,sc.tchr||0,sc.pat||0,sc.late||0,sc.meet||0,sc.loc||0,sc.ord||0,sc.badge||0,sc.veil||0,sc.uni||0,sc.coat||0,r.total!==undefined?r.total.toFixed(2):0,pd,r.notes||'']);
   }
-  var ws=XLSX.utils.aoa_to_sheet(rows); XLSX.utils.book_append_sheet(wb,ws,'تقييم '+date);
-  XLSX.writeFile(wb,'تقييم_'+date+'.xlsx'); toast('تم تصدير Excel ✓');
+  var ws=XLSX.utils.aoa_to_sheet(rows); XLSX.utils.book_append_sheet(wb,ws,'تقييم '+cleanDate);
+  XLSX.writeFile(wb,'تقييم_'+cleanDate+'.xlsx'); toast('تم تصدير Excel ✓');
 }
  
 function doExcelAll(){
@@ -1489,7 +1525,7 @@ function doExcel(){
     var rec=day[i]||{}, sc=rec.scores||{};
     var att=rec.attendance==='present'?'حاضر':rec.attendance==='absent'?'غائب':'—';
     var pd=rec.paperDelivered===true?'سلّم':rec.paperDelivered===false?'لم يسلّم':'—';
-    rows.push([i+1,students[i].name,att,sc.dailynote||0,sc.gdisc||0,sc.cdisc||0,sc.staff||0,sc.std||0,sc.tchr||0,sc.pat||0,sc.late||0,sc.meet||0,sc.loc||0,sc.ord||0,sc.badge||0,sc.veil||0,sc.uni||0,sc.coat||0,rec.total!==undefined?rec.total.toFixed(2):0,pd,rec.notes||'']);
+    rows.push([i+1,sts[i].name,att,sc.dailynote||0,sc.gdisc||0,sc.cdisc||0,sc.staff||0,sc.std||0,sc.tchr||0,sc.pat||0,sc.late||0,sc.meet||0,sc.loc||0,sc.ord||0,sc.badge||0,sc.veil||0,sc.uni||0,sc.coat||0,rec.total!==undefined?rec.total.toFixed(2):0,pd,rec.notes||'']);
   }
   var ws=XLSX.utils.aoa_to_sheet(rows); XLSX.utils.book_append_sheet(wb,ws,'التقييم اليومي');
   XLSX.writeFile(wb,'تقييم_'+curDate+'.xlsx'); toast('تم تصدير Excel ✓');
