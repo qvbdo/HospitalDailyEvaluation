@@ -278,6 +278,26 @@ body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);
 .dm-field .val{font-size:14px;font-weight:700;color:var(--primary)}
 .dm-notes{padding:0 14px 12px;font-size:13px;color:var(--muted);font-style:italic}
  
+.db-topbar{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:12px}
+.db-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+.db-stat{background:var(--surface);border-radius:var(--r);padding:10px;border:1px solid var(--border);text-align:center}
+.db-stat .num{font-size:20px;font-weight:700}.db-stat .lbl{font-size:11px;color:var(--muted);margin-top:2px}
+.db-filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px}
+.db-table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;overflow-x:auto}
+.db-table{width:100%;border-collapse:collapse;min-width:700px}
+.db-table th{background:var(--primary);color:#fff;padding:10px 12px;font-size:12px;font-weight:600;text-align:right;white-space:nowrap}
+.db-table td{padding:9px 12px;font-size:13px;border-bottom:1px solid var(--border);vertical-align:middle}
+.db-table tr:last-child td{border-bottom:none}
+.db-table tr:nth-child(even) td{background:#f8fafc}
+.db-table tr:hover td{background:#eef4fb}
+.db-badge{display:inline-block;font-size:11px;font-weight:700;border-radius:10px;padding:2px 8px}
+.db-badge.morning{background:#d6eaf8;color:#1a5276}
+.db-badge.evening{background:#e8daef;color:#6c3483}
+.db-badge.hosp{background:#d5f5e3;color:#1e8449}
+.db-badge.area{background:#fef9e7;color:#7d6608}
+.db-apply-box{background:#eafaf1;border:1px solid #27ae60;border-radius:var(--r);padding:16px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.db-apply-box h3{font-size:14px;font-weight:700;color:#1e8449}
+.db-apply-box p{font-size:13px;color:var(--muted);margin-top:3px}
 @media(max-width:600px){
   .stats-bar{grid-template-columns:repeat(2,1fr)}
   .lhdr,.srow{grid-template-columns:24px 1fr 88px 55px}
@@ -396,6 +416,7 @@ body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);
         <button class="tab-btn" id="tbp" onclick="showTab('paper')">📄 الورقة اليومية</button>
         <button class="tab-btn" id="tbr" onclick="showTab('roster')">🏥 جدول المجموعات</button>
         <button class="tab-btn" id="tbh" onclick="showTab('hist')">📅 السجل التاريخي</button>
+        <button class="tab-btn" id="tbdb" onclick="showTab('db')">🗄️ قاعدة البيانات</button>
       </div>
  
       <!-- TAB: ATTENDANCE -->
@@ -497,6 +518,54 @@ body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);
           </div>
         </div>
         <div id="histList"></div>
+      <!-- TAB: STUDENT DATABASE -->
+      <div class="tab-panel" id="pdb">
+        <div class="db-topbar">
+          <div>
+            <h2 style="font-size:16px;font-weight:700;color:var(--primary)">🗄️ قاعدة بيانات الطلاب</h2>
+            <p style="font-size:13px;color:var(--muted);margin-top:3px">استيراد بيانات الطلاب الكاملة — منفصلة تماماً عن سير العمل اليومي</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button class="btn bo" onclick="dlDbTemplate()">📥 تحميل القالب</button>
+            <button class="btn bp" onclick="document.getElementById('dbFile').click()">📂 استيراد Excel</button>
+            <input type="file" id="dbFile" accept=".xlsx,.xls" style="display:none" onchange="importDb(event)">
+            <button class="btn ba" onclick="dbApplyToGroups()" id="dbApplyBtn" style="display:none">✅ تطبيق على المجموعات</button>
+            <button class="btn bred" onclick="clearDb()" id="dbClearBtn" style="display:none">🗑 مسح</button>
+          </div>
+        </div>
+ 
+        <!-- stats row -->
+        <div class="db-stats" id="dbStats" style="display:none">
+          <div class="db-stat"><div class="num" id="dbStatTotal">0</div><div class="lbl">إجمالي الطلاب</div></div>
+          <div class="db-stat"><div class="num" id="dbStatMorning" style="color:var(--pl)">0</div><div class="lbl">صباحي</div></div>
+          <div class="db-stat"><div class="num" id="dbStatEvening" style="color:#8e44ad">0</div><div class="lbl">مسائي</div></div>
+          <div class="db-stat"><div class="num" id="dbStatHospitals" style="color:var(--accent)">0</div><div class="lbl">مستشفى</div></div>
+          <div class="db-stat"><div class="num" id="dbStatGroups" style="color:var(--warn)">0</div><div class="lbl">مجموعة</div></div>
+        </div>
+ 
+        <!-- filters -->
+        <div class="db-filters" id="dbFilters" style="display:none">
+          <input type="text" class="sbox" id="dbSearch" placeholder="🔍 ابحث باسم أو مستشفى أو منطقة..." oninput="renderDb()" style="flex:1;min-width:180px">
+          <select class="rsel" id="dbFHosp" onchange="renderDb()"><option value="">كل المستشفيات</option></select>
+          <select class="rsel" id="dbFType" onchange="renderDb()">
+            <option value="">صباحي ومسائي</option>
+            <option value="صباحي">صباحي</option>
+            <option value="مسائي">مسائي</option>
+          </select>
+          <select class="rsel" id="dbFGroup" onchange="renderDb()"><option value="">كل المجموعات</option></select>
+          <select class="rsel" id="dbFArea" onchange="renderDb()"><option value="">كل المناطق</option></select>
+        </div>
+ 
+        <div id="dbContent">
+          <div class="rempty">
+            <div style="font-size:44px;margin-bottom:10px">🗄️</div>
+            <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">لا توجد قاعدة بيانات</div>
+            <div style="font-size:13px;color:var(--muted);margin-bottom:14px">حمّل القالب الموسّع، عبّئه ببيانات الطلاب الكاملة، ثم استورده هنا</div>
+            <button class="btn bp" onclick="document.getElementById('dbFile').click()">📂 استيراد Excel الآن</button>
+          </div>
+        </div>
+      </div>
+ 
       </div>
     </div>
   </div>
@@ -634,6 +703,7 @@ var studentsMorning = [];
 var studentsEvening = [];
 var history  = {};   // keyed by "YYYY-MM-DD_morning" or "YYYY-MM-DD_evening"
 var roster   = [];
+var studentDb = [];   // master student database — completely separate from workflow
 var curDate  = today();
 var curGroup = 'morning';  // 'morning' | 'evening'
 var curSt    = null;
@@ -1037,13 +1107,14 @@ var FIELDS=[
 function showTab(n){
   document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active')});
   document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active')});
-  var panels={att:'pa',paper:'pp',roster:'pr',hist:'ph'};
-  var btns={att:'tba',paper:'tbp',roster:'tbr',hist:'tbh'};
+  var panels={att:'pa',paper:'pp',roster:'pr',hist:'ph',db:'pdb'};
+  var btns={att:'tba',paper:'tbp',roster:'tbr',hist:'tbh',db:'tbdb'};
   document.getElementById(panels[n]).classList.add('active');
   document.getElementById(btns[n]).classList.add('active');
   if(n==='paper')  renderPaper();
   if(n==='roster') renderRoster();
   if(n==='hist')   renderHist();
+  if(n==='db')     renderDb();
 }
  
 function switchGroup(g){
@@ -1709,6 +1780,293 @@ function printAttSheet(){
  
 tick(); setInterval(tick, 1000);
 initConnectivityCheck();
+ 
+ 
+// ═══════════════════════════════════════════
+// STUDENT DATABASE — Completely isolated feature
+// Does NOT affect attendance, evaluation, or any existing workflow
+// ═══════════════════════════════════════════
+ 
+function saveStudentDb(){
+  if(typeof saveAll === 'function'){
+    // Save to Firebase/localStorage alongside other data
+    if(currentUser && typeof dbRef === 'function' && dbRef('studentDb')){
+      setSyncStatus('saving');
+      dbRef('studentDb').set(studentDb)
+        .then(function(){ setSyncStatus('saved'); })
+        .catch(function(){ setSyncStatus('offline'); localSaveDb(); });
+    } else { localSaveDb(); }
+  } else { localSaveDb(); }
+}
+ 
+function localSaveDb(){
+  try{ localStorage.setItem('hsp_sdb', JSON.stringify(studentDb)); }catch(e){}
+}
+ 
+function loadStudentDbLocal(){
+  try{
+    var d = JSON.parse(localStorage.getItem('hsp_sdb')||'null');
+    if(d && Array.isArray(d)) studentDb = d;
+  }catch(e){}
+}
+ 
+// ── DOWNLOAD TEMPLATE ────────────────────────────────────────────────
+function dlDbTemplate(){
+  var wb = XLSX.utils.book_new();
+  var headers = ['اسم الطالب','رقم المجموعة','اسم المستشفى','المنطقة','أيام العمل','نوع الدراسة','البريد الإلكتروني','تاريخ البدء','ملاحظات'];
+  var samples = [
+    ['أحمد محمد علي','1','مستشفى الكندي','الرصافة','الأحد-الأربعاء','صباحي','ahmed@university.edu','2025-03-03',''],
+    ['سارة خالد حسن','1','مستشفى الكندي','الرصافة','الأحد-الأربعاء','صباحي','sara@university.edu','2025-03-03',''],
+    ['نور أحمد سعيد','2','مستشفى الكندي','الرصافة','الأحد-الأربعاء','مسائي','noor@university.edu','2025-03-03',''],
+    ['زينب كريم طاهر','3','مستشفى ابن سينا','الكرخ','الأحد-الأربعاء','صباحي','zainab@university.edu','2025-03-03',''],
+    ['علي حسين جاسم','3','مستشفى ابن سينا','الكرخ','الأحد-الأربعاء','صباحي','ali@university.edu','2025-03-03',''],
+    ['ريم سامر نوري','4','مستشفى ابن سينا','الكرخ','الأحد-الأربعاء','مسائي','reem@university.edu','2025-03-03',''],
+    ['لينا فارس حيدر','5','مستشفى الجمهوري','الكرخ','الأحد-الأربعاء','صباحي','lina@university.edu','2025-03-10',''],
+    ['دينا أمير يوسف','6','مستشفى الجمهوري','الكرخ','الأحد-الأربعاء','مسائي','dina@university.edu','2025-03-10',''],
+  ];
+  var data = [headers].concat(samples);
+  var ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{wch:22},{wch:12},{wch:22},{wch:14},{wch:18},{wch:12},{wch:26},{wch:14},{wch:18}];
+  // Style header row
+  XLSX.utils.book_append_sheet(wb, ws, 'قاعدة بيانات الطلاب');
+ 
+  // Instructions sheet
+  var inst = [
+    ['تعليمات الاستخدام',''],
+    ['',''],
+    ['العمود','الوصف'],
+    ['اسم الطالب','الاسم الكامل للطالب — مطلوب'],
+    ['رقم المجموعة','رقم المجموعة (1-6)'],
+    ['اسم المستشفى','اكتب الاسم بنفس الطريقة لكل طلاب نفس المستشفى'],
+    ['المنطقة','المنطقة الجغرافية للمستشفى (مثال: الرصافة، الكرخ)'],
+    ['أيام العمل','أيام الدوام (مثال: الأحد-الأربعاء)'],
+    ['نوع الدراسة','اكتب بالضبط: صباحي أو مسائي'],
+    ['البريد الإلكتروني','البريد الجامعي للطالب (اختياري)'],
+    ['تاريخ البدء','تاريخ أول يوم بصيغة YYYY-MM-DD'],
+    ['ملاحظات','أي ملاحظة خاصة بالطالب (اختياري)'],
+  ];
+  var ws2 = XLSX.utils.aoa_to_sheet(inst);
+  ws2['!cols'] = [{wch:20},{wch:50}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'تعليمات');
+ 
+  XLSX.writeFile(wb, 'student_database_template.xlsx');
+  toast('تم تحميل القالب الموسّع ✓');
+}
+ 
+// ── IMPORT ───────────────────────────────────────────────────────────
+function importDb(event){
+  var file = event.target.files[0]; if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      var data = new Uint8Array(e.target.result);
+      var wb = XLSX.read(data, {type:'array', cellDates:true});
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+ 
+      // Find header row
+      var hr = -1;
+      for(var i=0;i<rows.length;i++){
+        for(var j=0;j<rows[i].length;j++){
+          var cell = String(rows[i][j]).trim();
+          if(cell.indexOf('اسم الطالب')>=0){ hr=i; break; }
+        }
+        if(hr>=0) break;
+      }
+      if(hr<0){ toast('لم يتم العثور على ترويسة — تأكد من استخدام القالب'); return; }
+ 
+      var hdrs = rows[hr].map(function(c){ return String(c).trim(); });
+      function ci(n){ for(var x=0;x<hdrs.length;x++){ if(hdrs[x].indexOf(n)>=0) return x; } return -1; }
+ 
+      var iN  = ci('الطالب'),    iG  = ci('المجموعة'),  iH  = ci('المستشفى');
+      var iA  = ci('المنطقة'),   iWD = ci('أيام'),      iT  = ci('الدراسة');
+      var iE  = ci('البريد'),    iD  = ci('تاريخ'),     iNt = ci('ملاحظات');
+ 
+      if(iN<0){ toast('عمود اسم الطالب غير موجود'); return; }
+ 
+      var nr = [];
+      for(var i=hr+1; i<rows.length; i++){
+        var row = rows[i];
+        var name = String(row[iN]||'').trim();
+        if(!name) continue;
+ 
+        var sd = '';
+        if(iD>=0 && row[iD]){
+          var raw = row[iD];
+          if(raw instanceof Date) sd = raw.toISOString().slice(0,10);
+          else if(typeof raw==='number') sd = new Date(Math.round((raw-25569)*86400*1000)).toISOString().slice(0,10);
+          else sd = String(raw).trim().slice(0,10);
+        }
+ 
+        nr.push({
+          name:     name,
+          group:    iG>=0  ? String(row[iG]||'').trim()  : '',
+          hospital: iH>=0  ? String(row[iH]||'').trim()  : '',
+          area:     iA>=0  ? String(row[iA]||'').trim()  : '',
+          workDays: iWD>=0 ? String(row[iWD]||'').trim() : '',
+          type:     iT>=0  ? String(row[iT]||'').trim()  : '',
+          email:    iE>=0  ? String(row[iE]||'').trim()  : '',
+          startDate:sd,
+          notes:    iNt>=0 ? String(row[iNt]||'').trim() : ''
+        });
+      }
+ 
+      if(!nr.length){ toast('لا توجد بيانات في الملف'); return; }
+ 
+      studentDb = nr;
+      saveStudentDb();
+      renderDb();
+      toast('تم استيراد ' + nr.length + ' طالب إلى قاعدة البيانات ✓');
+    }catch(err){ toast('خطأ في قراءة الملف'); console.error(err); }
+    event.target.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+}
+ 
+// ── RENDER ───────────────────────────────────────────────────────────
+function renderDb(){
+  var cont    = document.getElementById('dbContent');
+  var stats   = document.getElementById('dbStats');
+  var filters = document.getElementById('dbFilters');
+  var applyBtn= document.getElementById('dbApplyBtn');
+  var clearBtn= document.getElementById('dbClearBtn');
+ 
+  if(!studentDb.length){
+    cont.innerHTML = '<div class="rempty"><div style="font-size:44px;margin-bottom:10px">🗄️</div><div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">لا توجد قاعدة بيانات</div><div style="font-size:13px;color:var(--muted);margin-bottom:14px">حمّل القالب الموسّع، عبّئه ببيانات الطلاب الكاملة، ثم استورده هنا</div><button class="btn bp" onclick="document.getElementById(\'dbFile\').click()">📂 استيراد Excel الآن</button></div>';
+    stats.style.display='none'; filters.style.display='none';
+    applyBtn.style.display='none'; clearBtn.style.display='none';
+    return;
+  }
+ 
+  stats.style.display=''; filters.style.display='';
+  applyBtn.style.display=''; clearBtn.style.display='';
+ 
+  // Build filter options
+  var hosps=[], groups=[], areas=[];
+  for(var i=0;i<studentDb.length;i++){
+    var r=studentDb[i];
+    if(r.hospital && hosps.indexOf(r.hospital)<0) hosps.push(r.hospital);
+    if(r.group    && groups.indexOf(r.group)<0)   groups.push(r.group);
+    if(r.area     && areas.indexOf(r.area)<0)     areas.push(r.area);
+  }
+  hosps.sort(); groups.sort(function(a,b){return Number(a)-Number(b);}); areas.sort();
+ 
+  var fH=document.getElementById('dbFHosp'), fG=document.getElementById('dbFGroup'), fA=document.getElementById('dbFArea');
+  var sH=fH.value, sG=fG.value, sA=fA.value, sT=document.getElementById('dbFType').value;
+  var q=(document.getElementById('dbSearch').value||'').toLowerCase();
+ 
+  fH.innerHTML='<option value="">كل المستشفيات</option>'+hosps.map(function(h){return'<option value="'+h+'"'+(h===sH?' selected':'')+'>'+h+'</option>';}).join('');
+  fG.innerHTML='<option value="">كل المجموعات</option>'+groups.map(function(g){return'<option value="'+g+'"'+(g===sG?' selected':'')+'>مجموعة '+g+'</option>';}).join('');
+  fA.innerHTML='<option value="">كل المناطق</option>'+areas.map(function(a){return'<option value="'+a+'"'+(a===sA?' selected':'')+'>'+a+'</option>';}).join('');
+ 
+  // Filter
+  var fil = studentDb.filter(function(r){
+    if(sH && r.hospital!==sH) return false;
+    if(sT && r.type!==sT)     return false;
+    if(sG && r.group!==sG)    return false;
+    if(sA && r.area!==sA)     return false;
+    if(q){
+      var hay = (r.name+r.hospital+r.area+r.email+r.group).toLowerCase();
+      if(hay.indexOf(q)<0) return false;
+    }
+    return true;
+  });
+ 
+  // Stats (always on full dataset)
+  var mCount=0, eCount=0, hSet={}, gSet={};
+  for(var i=0;i<studentDb.length;i++){
+    var r=studentDb[i];
+    if(r.type==='صباحي') mCount++; else eCount++;
+    if(r.hospital) hSet[r.hospital]=1;
+    if(r.group)    gSet[r.group]=1;
+  }
+  document.getElementById('dbStatTotal').textContent    = studentDb.length;
+  document.getElementById('dbStatMorning').textContent  = mCount;
+  document.getElementById('dbStatEvening').textContent  = eCount;
+  document.getElementById('dbStatHospitals').textContent= Object.keys(hSet).length;
+  document.getElementById('dbStatGroups').textContent   = Object.keys(gSet).length;
+ 
+  // Table
+  if(!fil.length){
+    cont.innerHTML='<div class="rempty" style="padding:28px">لا توجد نتائج للفلاتر المختارة</div>';
+    return;
+  }
+ 
+  var html = '<div style="font-size:12px;color:var(--muted);padding:8px 4px;margin-bottom:6px">عرض '+fil.length+' من '+studentDb.length+' طالب</div>';
+  html += '<div class="db-table-wrap"><table class="db-table"><thead><tr>';
+  html += '<th style="width:30px">#</th>';
+  html += '<th>اسم الطالب</th>';
+  html += '<th>المجموعة</th>';
+  html += '<th>المستشفى</th>';
+  html += '<th>المنطقة</th>';
+  html += '<th>نوع الدراسة</th>';
+  html += '<th>أيام العمل</th>';
+  html += '<th>تاريخ البدء</th>';
+  html += '<th>البريد الإلكتروني</th>';
+  html += '<th>ملاحظات</th>';
+  html += '</tr></thead><tbody>';
+ 
+  for(var i=0;i<fil.length;i++){
+    var r=fil[i];
+    var isMo = r.type==='صباحي';
+    html += '<tr>';
+    html += '<td style="text-align:center;color:var(--muted)">'+(i+1)+'</td>';
+    html += '<td style="font-weight:500">'+r.name+'</td>';
+    html += '<td style="text-align:center"><span class="db-badge" style="background:#f0f4f8;color:var(--text)">'+( r.group||'—')+'</span></td>';
+    html += '<td><span class="db-badge hosp">'+(r.hospital||'—')+'</span></td>';
+    html += '<td><span class="db-badge area">'+(r.area||'—')+'</span></td>';
+    html += '<td style="text-align:center"><span class="db-badge '+(isMo?'morning':'evening')+'">'+(r.type||'—')+'</span></td>';
+    html += '<td style="font-size:12px;color:var(--muted)">'+(r.workDays||'—')+'</td>';
+    html += '<td style="font-size:12px;color:var(--muted)">'+(r.startDate||'—')+'</td>';
+    html += '<td style="font-size:12px;color:var(--pl)">'+(r.email?'<a href="mailto:'+r.email+'" style="color:var(--pl);text-decoration:none">'+r.email+'</a>':'—')+'</td>';
+    html += '<td style="font-size:12px;color:var(--muted)">'+(r.notes||'')+'</td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table></div>';
+  cont.innerHTML = html;
+}
+ 
+// ── APPLY TO GROUPS (optional, user-initiated) ───────────────────────
+function dbApplyToGroups(){
+  if(!studentDb.length){ toast('قاعدة البيانات فارغة'); return; }
+ 
+  var morning = studentDb.filter(function(r){ return r.type==='صباحي'; });
+  var evening  = studentDb.filter(function(r){ return r.type==='مسائي'; });
+ 
+  var msg = 'سيتم تحديث قوائم الطلاب من قاعدة البيانات:\n\n'
+    + '• المجموعة الصباحية: ' + morning.length + ' طالب\n'
+    + '• المجموعة المسائية: ' + evening.length + ' طالب\n\n'
+    + '⚠️ هذا سيستبدل القوائم الحالية فقط — بيانات التقييم والحضور السابقة لن تُمسح.\n\n'
+    + 'هل تريد المتابعة؟';
+ 
+  if(!confirm(msg)) return;
+ 
+  // Map to simple {name} objects that the existing workflow expects
+  studentsMorning = morning.map(function(r){ return {name: r.name}; });
+  studentsEvening = evening.map(function(r){ return {name: r.name}; });
+ 
+  // Save using the existing save mechanism
+  if(typeof saveStudents === 'function'){
+    var prev = curGroup;
+    curGroup = 'morning'; saveStudents();
+    curGroup = 'evening'; saveStudents();
+    curGroup = prev;
+  }
+ 
+  renderList();
+  toast('✅ تم تطبيق ' + studentDb.length + ' طالب على المجموعتين');
+}
+ 
+// ── CLEAR ────────────────────────────────────────────────────────────
+function clearDb(){
+  if(!confirm('هل تريد مسح قاعدة بيانات الطلاب؟\nلن تتأثر بيانات التقييم أو الحضور.')) return;
+  studentDb = [];
+  saveStudentDb();
+  renderDb();
+  toast('تم مسح قاعدة البيانات');
+}
+ 
+ 
 </script>
 </body>
 </html>
