@@ -290,6 +290,16 @@ body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);
 .dbb-ar{background:#fef9e7;color:#7d6608}
 .dbb-pres{background:#d5f5e3;color:#1e8449}
 .dbb-abs{background:#fadbd8;color:#922b21}
+.grp-loader-modal{background:#fff;border-radius:14px;width:100%;max-width:520px;direction:rtl;overflow:hidden}
+.grp-loader-hdr{background:var(--primary);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between}
+.grp-loader-hdr h2{font-size:15px;font-weight:600}
+.grp-loader-body{padding:16px;max-height:60vh;overflow-y:auto}
+.grp-item{border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;cursor:pointer;transition:all .15s}
+.grp-item:hover{border-color:var(--pl);background:#f0f7ff}
+.grp-item.selected{border-color:var(--pl);background:#e8f4ff}
+.grp-item-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.grp-item-meta{font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap}
+.grp-loader-ftr{padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:#fafbfc}
 @media(max-width:600px){
   .stats-bar{grid-template-columns:repeat(2,1fr)}
   .lhdr,.srow{grid-template-columns:24px 1fr 88px 55px}
@@ -433,6 +443,7 @@ body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);
           <button class="btn bp" onclick="sortSt()">🔤 أبجدي</button>
           <button class="btn ba" onclick="doExcel()">📥 Excel</button>
           <button class="btn" style="background:#c0392b;color:#fff" onclick="exportAttPDF()">🖨️ كشف الحضور</button>
+          <button class="btn" style="background:#117a65;color:#fff" onclick="openGrpLoader()">📋 تحميل مجموعة</button>
           <button class="btn bw" onclick="clearDay()">🔄 يوم جديد</button>
           <button class="btn" style="background:#8e44ad;color:#fff" onclick="newGroup()">👥 مجموعة جديدة</button>
         </div>
@@ -535,6 +546,21 @@ body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);
       </div>
  
       </div>
+    </div>
+  </div>
+</div>
+ 
+<!-- GROUP LOADER MODAL -->
+<div class="overlay" id="grpLoaderM">
+  <div class="grp-loader-modal">
+    <div class="grp-loader-hdr">
+      <h2>📋 تحميل مجموعة من الجدول</h2>
+      <button style="background:rgba(255,255,255,.2);border:none;color:#fff;width:27px;height:27px;border-radius:50%;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center" onclick="closeGrpLoader()">✕</button>
+    </div>
+    <div class="grp-loader-body" id="grpLoaderBody"></div>
+    <div class="grp-loader-ftr">
+      <button class="btn bo" onclick="closeGrpLoader()">إلغاء</button>
+      <button class="btn bp" id="grpLoaderApply" onclick="applyGrpLoader()" style="display:none">✅ تحميل هذه المجموعة</button>
     </div>
   </div>
 </div>
@@ -1610,6 +1636,7 @@ function tick(){
 function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2400);}
  
 document.getElementById('evalM').addEventListener('click',function(e){if(e.target===this)closeMod();});
+document.getElementById('grpLoaderM').addEventListener('click',function(e){if(e.target===this)closeGrpLoader();});
 document.getElementById('attPdfModal').addEventListener('click',function(e){if(e.target===this)document.getElementById('attPdfModal').classList.remove('open');});
 document.getElementById('calM').addEventListener('click',function(e){if(e.target===this)closeCal();});
 document.getElementById('dayDetailM').addEventListener('click',function(e){if(e.target===this)closeDayDetail();});
@@ -1999,9 +2026,155 @@ function dbClear(){
   toast('تم مسح قاعدة البيانات');
 }
  
+ 
+// ════════════════════════════════════════════════════
+// GROUP LOADER — Load students from roster into attendance
+// Completely safe: never deletes evaluation or history data
+// ════════════════════════════════════════════════════
+var grpLoaderSelected = null;
+ 
+function openGrpLoader(){
+  if(!roster || !roster.length){
+    toast('⚠️ لا يوجد جدول مجموعات. ارفع ملف Excel في تبويب "جدول المجموعات" أولاً');
+    return;
+  }
+ 
+  grpLoaderSelected = null;
+  document.getElementById('grpLoaderApply').style.display = 'none';
+ 
+  // Build groups from roster
+  var groups = {};
+  for(var i=0; i<roster.length; i++){
+    var r = roster[i];
+    var key = (r.hospital||'?') + '|' + (r.group||'?') + '|' + (r.type||'');
+    if(!groups[key]) groups[key] = {
+      hospital: r.hospital||'',
+      group:    r.group||'',
+      type:     r.type||'',
+      startDate:r.startDate||'',
+      students: []
+    };
+    groups[key].students.push(r.name);
+  }
+ 
+  var keys = Object.keys(groups).sort(function(a,b){
+    var ga = groups[a], gb = groups[b];
+    if(ga.hospital !== gb.hospital) return ga.hospital.localeCompare(gb.hospital,'ar');
+    return (parseInt(ga.group)||0) - (parseInt(gb.group)||0);
+  });
+ 
+  var today = new Date().toISOString().slice(0,10);
+  var dnames = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+ 
+  var html = '';
+ 
+  // Check if current group already has students — show warning
+  var curSts = getStudents();
+  if(curSts && curSts.length > 0){
+    html += '<div style="background:#fff8e1;border:1px solid #f39c12;border-radius:8px;padding:10px 13px;margin-bottom:12px;font-size:13px;color:#7d6608">';
+    html += '⚠️ المجموعة الحالية ('+(curGroup==='morning'?'صباحية':'مسائية')+') تحتوي على '+curSts.length+' طالب. سيتم استبدال الأسماء فقط — بيانات التقييم والحضور محفوظة.';
+    html += '</div>';
+  }
+ 
+  if(!keys.length){
+    html += '<div style="text-align:center;padding:24px;color:var(--muted)">لا توجد مجموعات في الجدول</div>';
+  } else {
+    html += '<div style="font-size:13px;color:var(--muted);margin-bottom:10px">اختر المجموعة التي تريد تحميلها في تبويب الحضور:</div>';
+  }
+ 
+  for(var ki=0; ki<keys.length; ki++){
+    var key = keys[ki];
+    var g = groups[key];
+    var isMo = g.type === 'صباحي';
+    var sched = getSched(g.startDate);
+    var isToday = sched.indexOf(today) >= 0;
+ 
+    var schedText = '';
+    if(sched.length){
+      var dObj = new Date(sched[0]+'T00:00:00');
+      schedText = dnames[dObj.getDay()] + ' ' + sched[0];
+      if(sched.length > 1){
+        var dObj2 = new Date(sched[sched.length-1]+'T00:00:00');
+        schedText += ' — ' + dnames[dObj2.getDay()] + ' ' + sched[sched.length-1];
+      }
+    }
+ 
+    html += '<div class="grp-item" id="grpItem_'+ki+'" data-ki="'+ki+'" data-key="'+encodeURIComponent(key)+'" data-type="'+encodeURIComponent(g.type)+'" onclick="selectGrpItemEl(this)">';
+    html += '<div class="grp-item-title">';
+    if(isToday) html += '<span style="color:var(--success);font-size:12px">🟢 اليوم</span>';
+    html += 'مجموعة ' + (g.group||'—');
+    html += '<span style="background:'+(isMo?'#d6eaf8':'#e8daef')+';color:'+(isMo?'#1a5276':'#6c3483')+';border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700">'+(g.type||'—')+'</span>';
+    html += '</div>';
+    html += '<div class="grp-item-meta">';
+    html += '<span>🏥 ' + (g.hospital||'غير محدد') + '</span>';
+    html += '<span>👥 ' + g.students.length + ' طالب</span>';
+    if(schedText) html += '<span>📅 ' + schedText + '</span>';
+    html += '</div>';
+    html += '</div>';
+  }
+ 
+  document.getElementById('grpLoaderBody').innerHTML = html;
+  document.getElementById('grpLoaderM').classList.add('open');
+}
+ 
+function selectGrpItemEl(el){
+  var idx  = el.getAttribute('data-ki');
+  var key  = decodeURIComponent(el.getAttribute('data-key'));
+  var type = decodeURIComponent(el.getAttribute('data-type'));
+  document.querySelectorAll('.grp-item').forEach(function(x){ x.classList.remove('selected'); });
+  el.classList.add('selected');
+  grpLoaderSelected = {key: key, type: type, idx: idx};
+  document.getElementById('grpLoaderApply').style.display = '';
+}
+ 
+function closeGrpLoader(){
+  document.getElementById('grpLoaderM').classList.remove('open');
+  grpLoaderSelected = null;
+}
+ 
+function applyGrpLoader(){
+  if(!grpLoaderSelected) return;
+ 
+  // Find the selected group's students in roster
+  var key = grpLoaderSelected.key;
+  var parts = key.split('|');
+  var hosp = parts[0], grpNum = parts[1], typ = parts[2];
+ 
+  var names = [];
+  for(var i=0; i<roster.length; i++){
+    var r = roster[i];
+    if((r.hospital||'') === hosp && (r.group||'') === grpNum && (r.type||'') === typ){
+      if(r.name) names.push({name: r.name});
+    }
+  }
+ 
+  if(!names.length){ toast('لا يوجد طلاب في هذه المجموعة'); return; }
+ 
+  // Determine target group (morning or evening based on type)
+  var targetGroup = (typ === 'صباحي') ? 'morning' : 'evening';
+ 
+  // Switch to the correct morning/evening tab automatically
+  var prevGroup = curGroup;
+  curGroup = targetGroup;
+ 
+  // Set students
+  setStudents(names);
+  if(typeof saveStudents === 'function') saveStudents();
+ 
+  // Restore group view and re-render
+  curGroup = targetGroup; // stay on the loaded group
+  switchGroup(targetGroup);
+  renderList();
+ 
+  closeGrpLoader();
+  toast('✅ تم تحميل ' + names.length + ' طالب من المجموعة ' + grpNum + ' (' + (typ||'') + ')');
+}
+ 
+ 
 tick(); setInterval(tick, 1000);
 dbLoad();
 initConnectivityCheck();
 </script>
 </body>
 </html>
+ 
