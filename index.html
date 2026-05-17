@@ -5,9 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>تقييم الممارسة اليومية في المستشفى</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<!-- Firebase loads dynamically in JS only when online mode is chosen -->
 <style>
 :root{--bg:#f5f6fa;--surface:#fff;--border:#e2e6ea;--primary:#1a5276;--pl:#2980b9;--accent:#16a085;--danger:#c0392b;--warn:#e67e22;--success:#27ae60;--text:#2c3e50;--muted:#7f8c8d;--r:10px}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -297,21 +295,48 @@ body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);
   <div style="font-size:14px;color:var(--muted)">جاري التحميل...</div>
 </div>
  
-<!-- LOGIN -->
+<!-- LOGIN — UNIFIED: auto-detects connectivity, both options always available -->
 <div class="login-screen" id="loginScreen" style="display:none">
   <div class="login-card">
     <div class="logo">🏥</div>
     <h2>تقييم الممارسة اليومية</h2>
-    <p>سجّل دخولك بحساب Google لحفظ بياناتك ومزامنتها على جميع أجهزتك</p>
-    <button class="google-btn" onclick="signIn()">
-      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
-      تسجيل الدخول بـ Google
-    </button>
-    <div class="offline-sep" id="offlineSep" style="display:none">أو</div>
-    <button class="offline-login-btn" id="offlineLoginBtn" onclick="enterOfflineMode()">
-      📴 الدخول بدون إنترنت (الوضع غير المتصل)
-    </button>
-    <div class="login-err" id="loginErr">حدث خطأ في تسجيل الدخول. حاول مرة أخرى.</div>
+ 
+    <!-- Shown while detecting connectivity -->
+    <div id="checkingSection" style="padding:10px 0;color:var(--muted);font-size:14px">
+      ⏳ جارٍ التحقق من الاتصال...
+    </div>
+ 
+    <!-- ONLINE SECTION -->
+    <div id="onlineSection" style="display:none">
+      <p style="margin-bottom:16px;font-size:13px;color:var(--muted)">متصل بالإنترنت — بياناتك تُزامَن على جميع أجهزتك</p>
+      <button class="google-btn" onclick="signIn()">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" style="width:22px;height:22px">
+        تسجيل الدخول بـ Google
+      </button>
+      <div class="login-err" id="loginErr" style="margin-top:10px">حدث خطأ في تسجيل الدخول. حاول مرة أخرى.</div>
+      <div class="offline-sep" style="display:flex;margin:14px 0;align-items:center;gap:8px;color:var(--muted);font-size:12px">
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+        أو
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+      </div>
+      <button class="google-btn" onclick="enterOfflineMode()" style="color:var(--muted);font-size:13px;border-color:var(--border);justify-content:center">
+        📴 دخول بدون حساب (بيانات محلية فقط)
+      </button>
+    </div>
+ 
+    <!-- OFFLINE SECTION -->
+    <div id="offlineSection" style="display:none">
+      <div style="background:#fef9ec;border:1px solid #f0c040;border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:13px;color:#7d5a00">
+        ⚠️ لا يوجد اتصال بالإنترنت
+      </div>
+      <p style="margin-bottom:18px;font-size:13px;color:var(--muted)">البيانات تُحفظ في هذا المتصفح على هذا الجهاز</p>
+      <button class="google-btn" onclick="enterOfflineMode()" style="background:var(--primary);color:#fff;border-color:var(--primary);justify-content:center;font-size:15px">
+        🏥 دخول مباشر
+      </button>
+      <div style="margin-top:14px;font-size:11px;color:#bbb;text-align:center">
+        عند عودة الاتصال، أعد تحميل الصفحة لتسجيل الدخول بـ Google
+      </div>
+    </div>
   </div>
 </div>
  
@@ -319,8 +344,8 @@ body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);
 <div id="appRoot" style="display:none">
   <!-- OFFLINE BANNER -->
   <div class="offline-banner" id="offlineBanner">
-    <span>📴 وضع غير متصل — البيانات محفوظة محلياً فقط</span>
-    <button class="offline-reconnect" onclick="tryReconnect()">🔄 إعادة الاتصال</button>
+    <span id="offlineBannerText">📴 وضع غير متصل — البيانات محفوظة محلياً فقط</span>
+    <button class="offline-reconnect" id="reconnectBtn" onclick="tryReconnect()" style="display:none">🔄 إعادة الاتصال بـ Google</button>
   </div>
   <div class="hdr" id="hdrEl">
     <div class="hdr-top">
@@ -331,10 +356,10 @@ body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);
           <div class="datedisp" id="datedisp">--</div>
         </div>
         <button class="btn bo" onclick="openCal()" style="color:#fff;border-color:rgba(255,255,255,.4);background:rgba(255,255,255,.1)">📅 التقويم</button>
-        <div class="user-info" onclick="confirmSignOut()">
+        <div class="user-info" onclick="handleUserClick()">
           <img class="user-avatar" id="userAvatar" src="" alt="">
           <span class="user-name" id="userName"></span>
-          <span style="font-size:11px;opacity:.7">خروج</span>
+          <span style="font-size:11px;opacity:.7" id="userAction">خروج</span>
         </div>
       </div>
     </div>
@@ -528,194 +553,70 @@ body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);
 <div class="toast" id="toast"></div>
  
 <script>
-// ═══════════════════════════════════════════
-// FIREBASE INIT — Realtime Database
-// ═══════════════════════════════════════════
-var firebaseConfig = {
-  apiKey: "AIzaSyBjntU2pfegcQaQMx--XHYEW0iCBV2nGk0",
-  authDomain: "surveys89.firebaseapp.com",
-  databaseURL: "https://surveys89-default-rtdb.firebaseio.com",
-  projectId: "surveys89",
-  storageBucket: "surveys89.firebasestorage.app",
-  messagingSenderId: "400744445173",
-  appId: "1:400744445173:web:4e65b3f1b28021ddb301bc"
-};
-firebase.initializeApp(firebaseConfig);
-var auth = firebase.auth();
-var db   = firebase.database();
+// ═══════════════════════════════════════════════════════════════════════
+// UNIFIED BUILD — one file, two modes
+//
+//  ONLINE  → Firebase loads dynamically → Google Auth → cloud sync
+//  OFFLINE → no Firebase → localStorage only
+//
+//  The login screen auto-detects connectivity and highlights the right option.
+//  Both options are always visible so the user can choose either.
+// ═══════════════════════════════════════════════════════════════════════
  
-// ═══════════════════════════════════════════
-// OFFLINE MODE
-// ═══════════════════════════════════════════
-var isOfflineMode = false;  // true when user chose offline login or network is gone
+// ── MODE FLAG ─────────────────────────────────────────────────────────
+var isOfflineMode = false;
  
-// Called on page load — check connectivity and show offline login if needed
-function initConnectivityCheck(){
-  if(!navigator.onLine){
-    showOfflineLoginOption();
+// ── DYNAMIC FIREBASE LOADER ───────────────────────────────────────────
+// Firebase is NOT loaded at page start — only when the user chooses online mode.
+var firebaseLoaded = false;
+var firebaseListenerAttached = false;
+var auth, db;
+ 
+function loadFirebase(callback) {
+  if (firebaseLoaded) { if (callback) callback(); return; }
+  var scripts = [
+    'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js',
+    'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js',
+    'https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js'
+  ];
+  var loaded = 0;
+  function onAllLoaded() {
+    var firebaseConfig = {
+      apiKey: "AIzaSyBjntU2pfegcQaQMx--XHYEW0iCBV2nGk0",
+      authDomain: "surveys89.firebaseapp.com",
+      databaseURL: "https://surveys89-default-rtdb.firebaseio.com",
+      projectId: "surveys89",
+      storageBucket: "surveys89.firebasestorage.app",
+      messagingSenderId: "400744445173",
+      appId: "1:400744445173:web:4e65b3f1b28021ddb301bc"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    auth = firebase.auth();
+    db   = firebase.database();
+    firebaseLoaded = true;
+    if (!firebaseListenerAttached) { attachAuthListener(); firebaseListenerAttached = true; }
+    if (callback) callback();
   }
-  window.addEventListener('online',  onNetworkOnline);
-  window.addEventListener('offline', onNetworkOffline);
+  scripts.forEach(function(src) {
+    var s = document.createElement('script');
+    s.src = src;
+    s.onload = function() { loaded++; if (loaded === scripts.length) onAllLoaded(); };
+    s.onerror = function() {
+      showLoginSection('offline');
+      toast('تعذّر تحميل Firebase — جارٍ التحويل للوضع غير المتصل');
+    };
+    document.head.appendChild(s);
+  });
 }
  
-function showOfflineLoginOption(){
-  var btn = document.getElementById('offlineLoginBtn');
-  var sep = document.getElementById('offlineSep');
-  if(btn){ btn.classList.add('show'); }
-  if(sep){ sep.style.display='flex'; }
+// ── dbRef / key helpers ───────────────────────────────────────────────
+function dbRef(path) {
+  if (isOfflineMode || !db || !currentUser) return null;
+  return db.ref('users/' + currentUser.uid + '/' + path);
 }
- 
-function hideOfflineLoginOption(){
-  var btn = document.getElementById('offlineLoginBtn');
-  var sep = document.getElementById('offlineSep');
-  if(btn){ btn.classList.remove('show'); }
-  if(sep){ sep.style.display='none'; }
-}
- 
-function onNetworkOnline(){
-  if(isOfflineMode){
-    // Show a toast but don't force anything — let user choose to reconnect
-    toast('🌐 اتصال الإنترنت متاح. اضغط "إعادة الاتصال" للمزامنة.');
-    document.getElementById('offlineBanner').innerHTML =
-      '<span>🌐 الإنترنت متاح الآن!</span>'
-      +'<button class="offline-reconnect" onclick="tryReconnect()">🔄 تسجيل الدخول ومزامنة البيانات</button>';
-    document.getElementById('offlineBanner').classList.add('show');
-  } else {
-    hideOfflineLoginOption();
-  }
-}
- 
-function onNetworkOffline(){
-  if(!isOfflineMode && currentUser){
-    // Was logged in online, now lost connection — switch to offline banner
-    setSyncStatus('offline');
-    document.getElementById('offlineBanner').classList.add('show');
-  } else if(!isOfflineMode){
-    // On login screen, show offline option
-    showOfflineLoginOption();
-  }
-}
- 
-// User clicked "Enter without internet"
-function enterOfflineMode(){
-  // Find the most recently cached session in localStorage
-  var found = false;
-  for(var i=0; i<localStorage.length; i++){
-    var k = localStorage.key(i);
-    if(k && k.startsWith('hsp_')){
-      var uid = k.replace('hsp_','');
-      if(loadFromCache(uid)){
-        found = true;
-        break;
-      }
-    }
-  }
-  if(!found){
-    // No cache at all — still enter offline mode with empty data
-    enterOfflineModeWithUid('offline_user');
-  }
-}
- 
-function loadFromCache(uid){
-  try{
-    var raw = localStorage.getItem('hsp_'+uid);
-    if(!raw) return false;
-    var c = JSON.parse(raw);
-    studentsMorning = c.sm||[];
-    studentsEvening = c.se||[];
-    history         = c.h||{};
-    roster          = c.r||[];
-    // Restore settings fields
-    if(c.hn) document.getElementById('hName').value  = c.hn;
-    if(c.ho) document.getElementById('hNo').value    = c.ho;
-    if(c.sn) document.getElementById('supName').value= c.sn;
-    enterOfflineModeWithUid(uid);
-    return true;
-  }catch(e){ return false; }
-}
- 
-function enterOfflineModeWithUid(uid){
-  isOfflineMode = true;
-  currentUser = { uid: uid, displayName: 'وضع غير متصل', photoURL: null, email: '' };
-  dataLoaded = true;
- 
-  // Show app
-  document.getElementById('loginScreen').style.display   = 'none';
-  document.getElementById('appRoot').style.display       = 'block';
-  document.getElementById('hdrEl').style.display         = 'block';
-  document.getElementById('appBody').style.display       = 'block';
-  document.getElementById('userAvatar').src              = '';
-  document.getElementById('userName').textContent        = '📴 غير متصل';
- 
-  // Show offline banner
-  document.getElementById('offlineBanner').classList.add('show');
-  setSyncStatus('offline');
- 
-  renderList();
-  document.getElementById('clrRBtn').style.display = (roster&&roster.length>0)?'':'none';
-}
- 
-// User pressed "Reconnect" button
-function tryReconnect(){
-  if(navigator.onLine){
-    isOfflineMode = false;
-    currentUser = null;
-    studentsMorning=[]; studentsEvening=[]; history={}; roster=[];
-    document.getElementById('offlineBanner').classList.remove('show');
-    document.getElementById('appRoot').style.display  = 'none';
-    document.getElementById('hdrEl').style.display    = 'none';
-    document.getElementById('appBody').style.display  = 'none';
-    document.getElementById('loginScreen').style.display = 'flex';
-    toast('يرجى تسجيل الدخول للمزامنة');
-  } else {
-    toast('لا يوجد اتصال بالإنترنت حالياً');
-  }
-}
- 
-// Override saveStudents / saveDay / saveRoster / saveSettings
-// so they write to localStorage in offline mode instead of Firebase
-function saveStudents(){
-  if(!dataLoaded||!currentUser) return;
-  if(isOfflineMode){ cacheLocally(); toast('💾 محفوظ محلياً'); return; }
-  setSyncStatus('saving');
-  var key = curGroup==='morning'?'students_morning':'students_evening';
-  dbRef(key).set(getStudents())
-    .then(function(){ setSyncStatus('saved'); cacheLocally(); })
-    .catch(function(e){ setSyncStatus('offline'); console.error(e); });
-}
- 
-function saveDay(sessionK){
-  if(!dataLoaded||!currentUser) return;
-  if(isOfflineMode){ cacheLocally(); return; }
-  setSyncStatus('saving');
-  var dayData = history[sessionK]||{};
-  var dbKey = sessionK.replace(/^(\d{4})-(\d{2})-(\d{2})_/, '$1_$2_$3_');
-  dbRef('history/'+dbKey).set(dayData)
-    .then(function(){ setSyncStatus('saved'); cacheLocally(); })
-    .catch(function(e){ setSyncStatus('offline'); console.error(e); });
-}
- 
-function saveRoster(){
-  if(!dataLoaded||!currentUser) return;
-  if(isOfflineMode){ cacheLocally(); return; }
-  setSyncStatus('saving');
-  dbRef('roster').set(roster)
-    .then(function(){ setSyncStatus('saved'); cacheLocally(); })
-    .catch(function(e){ setSyncStatus('offline'); console.error(e); });
-}
- 
-function saveSettings(){
-  if(!currentUser) return;
-  if(isOfflineMode){ cacheLocally(); return; }
-  var s = {
-    hospitalName:   document.getElementById('hName').value||'',
-    hospitalNo:     document.getElementById('hNo').value||'',
-    supervisorName: document.getElementById('supName').value||''
-  };
-  dbRef('settings').set(s)
-    .then(function(){ setSyncStatus('saved'); })
-    .catch(function(e){ setSyncStatus('offline'); });
-}
+function dateToKey(d) { return d.replace(/-/g, '_'); }
+function keyToDate(k) { return k.replace(/_/g, '-'); }
+function sessionDbKey() { return dateToKey(curDate) + '_' + curGroup; }
  
 // ═══════════════════════════════════════════
 // STATE
@@ -741,206 +642,354 @@ function getSession(){ return getDay(sessionKey()); }
 // Active students based on current group
 function getStudents(){ return curGroup==='morning'?studentsMorning:studentsEvening; }
 function setStudents(arr){ if(curGroup==='morning') studentsMorning=arr; else studentsEvening=arr; }
+/* [FIREBASE RESTORE — DB REF]
 function dbRef(path){ return db.ref('users/'+currentUser.uid+'/'+path); }
-// Firebase Realtime DB forbids dots/hyphens in keys
+*/
+function dbRef(path){ return null; } // no-op stub in offline build
+ 
+// Key helpers (kept — used by history rendering)
 function dateToKey(d){ return d.replace(/-/g,'_'); }
 function keyToDate(k){ return k.replace(/_/g,'-'); }
 // Full session DB key e.g. "2025_03_03_morning"
 function sessionDbKey(){ return dateToKey(curDate)+'_'+curGroup; }
  
-// ═══════════════════════════════════════════
-// SYNC STATUS
-// ═══════════════════════════════════════════
-function setSyncStatus(s){
-  var dot=document.getElementById('syncDot');
-  var msg=document.getElementById('syncMsg');
-  if(s==='saving'){  dot.className='sync-dot saving'; msg.textContent='جاري الحفظ...';}
-  else if(s==='saved'){dot.className='sync-dot';      msg.textContent='محفوظ على السحابة ✓';}
-  else if(s==='offline'){dot.className='sync-dot offline'; msg.textContent='لا يوجد اتصال — البيانات محفوظة محلياً';}
+ 
+ 
+// ── SYNC STATUS ───────────────────────────────────────────────────────
+function setSyncStatus(s) {
+  var dot = document.getElementById('syncDot');
+  var msg = document.getElementById('syncMsg');
+  if (s === 'saving') {
+    dot.className = 'sync-dot saving';
+    msg.textContent = 'جاري الحفظ...';
+  } else if (s === 'saved') {
+    dot.className = 'sync-dot';
+    msg.textContent = isOfflineMode ? 'محفوظ محلياً ✓' : 'محفوظ على السحابة ✓';
+  } else if (s === 'offline') {
+    dot.className = 'sync-dot offline';
+    msg.textContent = isOfflineMode ? 'وضع غير متصل — محفوظ في المتصفح' : 'لا يوجد اتصال — محفوظ محلياً';
+  }
 }
  
-// ═══════════════════════════════════════════
-// AUTH
-// ═══════════════════════════════════════════
-function signIn(){
-  var provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).catch(function(err){
-    document.getElementById('loginErr').style.display='block';
-    console.error(err);
+// ── CONNECTIVITY DETECTION ────────────────────────────────────────────
+function initConnectivityCheck() {
+  detectAndShowLogin();
+  window.addEventListener('online',  onNetworkOnline);
+  window.addEventListener('offline', onNetworkOffline);
+}
+ 
+function detectAndShowLogin() {
+  document.getElementById('loadingScreen').style.display = 'none';
+  document.getElementById('loginScreen').style.display   = 'flex';
+  showLoginSection(navigator.onLine ? 'online' : 'offline');
+}
+ 
+function showLoginSection(mode) {
+  document.getElementById('checkingSection').style.display  = 'none';
+  document.getElementById('onlineSection').style.display    = mode === 'online'  ? 'block' : 'none';
+  document.getElementById('offlineSection').style.display   = mode === 'offline' ? 'block' : 'none';
+}
+ 
+function onNetworkOnline() {
+  if (isOfflineMode) {
+    document.getElementById('offlineBannerText').textContent = '🌐 الإنترنت متاح — أعد تسجيل الدخول للمزامنة السحابية';
+    document.getElementById('reconnectBtn').style.display = 'inline-block';
+  } else if (!currentUser) {
+    showLoginSection('online');
+  }
+}
+ 
+function onNetworkOffline() {
+  if (isOfflineMode) {
+    document.getElementById('offlineBannerText').textContent = '📴 وضع غير متصل — البيانات محفوظة محلياً';
+    document.getElementById('reconnectBtn').style.display = 'none';
+  } else if (currentUser) {
+    setSyncStatus('offline');
+    document.getElementById('offlineBanner').classList.add('show');
+  } else {
+    showLoginSection('offline');
+  }
+}
+ 
+// ── AUTH ──────────────────────────────────────────────────────────────
+function signIn() {
+  var btn = document.querySelector('#onlineSection .google-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ جارٍ التحميل...'; }
+  loadFirebase(function() {
+    var provider = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider).catch(function(err) {
+      document.getElementById('loginErr').style.display = 'block';
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width:22px;height:22px" alt="Google"> تسجيل الدخول بـ Google';
+      }
+      console.error(err);
+    });
   });
 }
  
-function confirmSignOut(){
-  if(isOfflineMode){
-    if(confirm('الخروج من الوضع غير المتصل؟')) {
+function attachAuthListener() {
+  auth.onAuthStateChanged(function(user) {
+    stopListeners();
+    dataLoaded = false;
+    studentsMorning = []; studentsEvening = []; history = {}; roster = [];
+    if (user) {
+      currentUser = user;
       isOfflineMode = false;
-      currentUser = null;
-      studentsMorning=[]; studentsEvening=[]; history={}; roster=[];
-      document.getElementById('sList').innerHTML='';
-      document.getElementById('hName').value='';
-      document.getElementById('hNo').value='';
-      document.getElementById('supName').value='';
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('appRoot').style.display     = 'block';
+      document.getElementById('hdrEl').style.display       = 'block';
+      document.getElementById('appBody').style.display     = 'block';
+      document.getElementById('userAvatar').src            = user.photoURL || '';
+      document.getElementById('userAvatar').style.display  = user.photoURL ? '' : 'none';
+      document.getElementById('userName').textContent      = user.displayName || user.email;
+      document.getElementById('userAction').textContent    = 'خروج';
       document.getElementById('offlineBanner').classList.remove('show');
-      document.getElementById('loginScreen').style.display='flex';
-      document.getElementById('appRoot').style.display='none';
+      setTimeout(function() { startListeners(); }, 100);
+    } else {
+      currentUser = null;
+      document.getElementById('sList').innerHTML = '';
+      document.getElementById('hName').value = '';
+      document.getElementById('hNo').value = '';
+      document.getElementById('supName').value = '';
+      document.getElementById('appRoot').style.display  = 'none';
+      document.getElementById('hdrEl').style.display    = 'none';
+      document.getElementById('appBody').style.display  = 'none';
+      document.getElementById('offlineBanner').classList.remove('show');
+      isOfflineMode = false;
+      detectAndShowLogin();
     }
-    return;
-  }
-  if(confirm('هل تريد تسجيل الخروج؟')) auth.signOut();
+  });
 }
  
-auth.onAuthStateChanged(function(user){
-  document.getElementById('loadingScreen').style.display='none';
-  // Always stop any existing listeners first — prevents old account data bleeding in
-  stopListeners();
-  // Always wipe memory immediately on any auth change
-  dataLoaded = false;
-  studentsMorning=[]; studentsEvening=[]; history={}; roster=[];
-  if(user){
-    currentUser = user;
-    document.getElementById('loginScreen').style.display='none';
-    document.getElementById('appRoot').style.display='block';
-    document.getElementById('hdrEl').style.display='block';
-    document.getElementById('appBody').style.display='block';
-    document.getElementById('userAvatar').src = user.photoURL||'';
-    document.getElementById('userName').textContent = user.displayName||user.email;
-    // Small delay to ensure old listeners are fully detached before starting new ones
-    setTimeout(function(){ startListeners(); }, 100);
+function handleUserClick() {
+  if (isOfflineMode) {
+    if (confirm('العودة إلى شاشة الدخول؟ (بياناتك ستبقى محفوظة في المتصفح)')) {
+      exitToLogin();
+    }
   } else {
-    currentUser = null;
-    studentsMorning=[]; studentsEvening=[]; history={}; roster=[];
-    document.getElementById('sList').innerHTML='';
-    document.getElementById('hName').value='';
-    document.getElementById('hNo').value='';
-    document.getElementById('supName').value='';
-    document.getElementById('loginScreen').style.display='flex';
-    document.getElementById('appRoot').style.display='none';
-    document.getElementById('offlineBanner').classList.remove('show');
-    isOfflineMode = false;
+    if (confirm('هل تريد تسجيل الخروج؟')) { if (auth) auth.signOut(); }
   }
-});
+}
  
-// ═══════════════════════════════════════════
-// REALTIME LISTENERS (onValue = live sync)
-// ═══════════════════════════════════════════
-function startListeners(){
-  if(!currentUser) return;
-  // Capture UID at start — reject any callback that fires for a different user
+function exitToLogin() {
+  isOfflineMode = false;
+  currentUser   = null;
+  studentsMorning = []; studentsEvening = []; history = {}; roster = [];
+  document.getElementById('sList').innerHTML = '';
+  document.getElementById('hName').value = '';
+  document.getElementById('hNo').value   = '';
+  document.getElementById('supName').value = '';
+  document.getElementById('offlineBanner').classList.remove('show');
+  document.getElementById('appRoot').style.display  = 'none';
+  document.getElementById('hdrEl').style.display    = 'none';
+  document.getElementById('appBody').style.display  = 'none';
+  detectAndShowLogin();
+}
+ 
+// ── OFFLINE ENTRY ─────────────────────────────────────────────────────
+function enterOfflineMode() {
+  isOfflineMode = true;
+  var found = false;
+  for (var i = 0; i < localStorage.length; i++) {
+    var k = localStorage.key(i);
+    if (k && k.startsWith('hsp_')) {
+      var uid = k.replace('hsp_', '');
+      if (loadFromCache(uid)) { found = true; break; }
+    }
+  }
+  if (!found) { enterOfflineModeWithUid('offline_user'); }
+}
+ 
+function loadFromCache(uid) {
+  try {
+    var raw = localStorage.getItem('hsp_' + uid);
+    if (!raw) return false;
+    var c = JSON.parse(raw);
+    studentsMorning = c.sm || [];
+    studentsEvening = c.se || [];
+    history         = c.h  || {};
+    roster          = c.r  || [];
+    if (c.hn) document.getElementById('hName').value   = c.hn;
+    if (c.ho) document.getElementById('hNo').value     = c.ho;
+    if (c.sn) document.getElementById('supName').value = c.sn;
+    enterOfflineModeWithUid(uid);
+    return true;
+  } catch(e) { return false; }
+}
+ 
+function enterOfflineModeWithUid(uid) {
+  isOfflineMode = true;
+  currentUser   = { uid: uid, displayName: 'غير متصل', photoURL: null, email: '' };
+  dataLoaded    = true;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appRoot').style.display     = 'block';
+  document.getElementById('hdrEl').style.display       = 'block';
+  document.getElementById('appBody').style.display     = 'block';
+  document.getElementById('userAvatar').style.display  = 'none';
+  document.getElementById('userName').textContent      = '📴 غير متصل';
+  document.getElementById('userAction').textContent    = 'خروج';
+  document.getElementById('offlineBannerText').textContent = '📴 وضع غير متصل — البيانات محفوظة في المتصفح';
+  document.getElementById('reconnectBtn').style.display   = 'none';
+  document.getElementById('offlineBanner').classList.add('show');
+  setSyncStatus('offline');
+  renderList();
+  document.getElementById('clrRBtn').style.display = (roster && roster.length > 0) ? '' : 'none';
+}
+ 
+// ── RECONNECT (offline → back to login) ───────────────────────────────
+function tryReconnect() {
+  if (navigator.onLine) {
+    exitToLogin();
+  } else {
+    toast('لا يوجد اتصال بالإنترنت حالياً');
+  }
+}
+ 
+// ── FIREBASE REALTIME LISTENERS ───────────────────────────────────────
+function startListeners() {
+  if (!currentUser || isOfflineMode) return;
   var myUid = currentUser.uid;
   dataLoaded = false;
   setSyncStatus('saving');
+  var loaded = { students: false, history: false, roster: false, settings: false };
  
-  var loaded = {students:false, history:false, roster:false, settings:false};
- 
-  function isStillMe(){ return currentUser && currentUser.uid === myUid; }
- 
-  function checkAllLoaded(){
-    if(!isStillMe()) return; // stale callback — ignore
-    if(loaded.students && loaded.history && loaded.roster && loaded.settings){
-      dataLoaded = true;
-      setSyncStatus('saved');
-      renderList();
-      document.getElementById('clrRBtn').style.display = (roster&&roster.length>0)?'':'none';
+  function isStillMe() { return currentUser && currentUser.uid === myUid; }
+  function checkAllLoaded() {
+    if (!isStillMe()) return;
+    if (loaded.students && loaded.history && loaded.roster && loaded.settings) {
+      dataLoaded = true; setSyncStatus('saved'); renderList();
+      document.getElementById('clrRBtn').style.display = (roster && roster.length > 0) ? '' : 'none';
       cacheLocally();
     }
   }
  
-  // Students morning listener
   var smRef = dbRef('students_morning');
-  smRef.on('value', function(snap){
-    if(!isStillMe()) return;
+  smRef.on('value', function(snap) {
+    if (!isStillMe()) return;
     var val = snap.val();
     studentsMorning = val ? (Array.isArray(val) ? val : Object.values(val)) : [];
     loaded.students = true;
-    if(dataLoaded){ renderList(); cacheLocally(); }
-    else checkAllLoaded();
+    if (dataLoaded) { renderList(); cacheLocally(); } else checkAllLoaded();
   });
-  dbListeners.push({ref:smRef, event:'value'});
+  dbListeners.push({ ref: smRef, event: 'value' });
  
-  // Students evening listener
   var seRef = dbRef('students_evening');
-  seRef.on('value', function(snap){
-    if(!isStillMe()) return;
+  seRef.on('value', function(snap) {
+    if (!isStillMe()) return;
     var val = snap.val();
     studentsEvening = val ? (Array.isArray(val) ? val : Object.values(val)) : [];
-    if(dataLoaded){ renderList(); cacheLocally(); }
+    if (dataLoaded) { renderList(); cacheLocally(); }
   });
-  dbListeners.push({ref:seRef, event:'value'});
+  dbListeners.push({ ref: seRef, event: 'value' });
  
-  // History listener
   var hRef = dbRef('history');
-  hRef.on('value', function(snap){
-    if(!isStillMe()) return;
+  hRef.on('value', function(snap) {
+    if (!isStillMe()) return;
     var raw = snap.val() || {};
     history = {};
-    Object.keys(raw).forEach(function(k){ history[keyToDate(k)] = raw[k]; });
+    Object.keys(raw).forEach(function(k) { history[keyToDate(k)] = raw[k]; });
     loaded.history = true;
-    if(dataLoaded){ renderList(); cacheLocally(); }
-    else checkAllLoaded();
+    if (dataLoaded) { renderList(); cacheLocally(); } else checkAllLoaded();
   });
-  dbListeners.push({ref:hRef, event:'value'});
+  dbListeners.push({ ref: hRef, event: 'value' });
  
-  // Roster listener
   var rRef = dbRef('roster');
-  rRef.on('value', function(snap){
-    if(!isStillMe()) return;
+  rRef.on('value', function(snap) {
+    if (!isStillMe()) return;
     var val = snap.val();
     roster = val ? (Array.isArray(val) ? val : Object.values(val)) : [];
     loaded.roster = true;
-    document.getElementById('clrRBtn').style.display = roster.length>0?'':'none';
-    if(dataLoaded){ renderRosterIfActive(); cacheLocally(); }
-    else checkAllLoaded();
+    document.getElementById('clrRBtn').style.display = roster.length > 0 ? '' : 'none';
+    if (dataLoaded) { renderRosterIfActive(); cacheLocally(); } else checkAllLoaded();
   });
-  dbListeners.push({ref:rRef, event:'value'});
+  dbListeners.push({ ref: rRef, event: 'value' });
  
-  // Settings listener
   var stRef = dbRef('settings');
-  stRef.on('value', function(snap){
-    if(!isStillMe()) return;
-    var s = snap.val()||{};
-    document.getElementById('hName').value   = s.hospitalName||'';
-    document.getElementById('hNo').value     = s.hospitalNo||'';
-    document.getElementById('supName').value = s.supervisorName||'';
+  stRef.on('value', function(snap) {
+    if (!isStillMe()) return;
+    var s = snap.val() || {};
+    document.getElementById('hName').value   = s.hospitalName   || '';
+    document.getElementById('hNo').value     = s.hospitalNo     || '';
+    document.getElementById('supName').value = s.supervisorName || '';
     loaded.settings = true;
     checkAllLoaded();
   });
-  dbListeners.push({ref:stRef, event:'value'});
+  dbListeners.push({ ref: stRef, event: 'value' });
  
-  // Connection state
-  db.ref('.info/connected').on('value', function(snap){
-    if(!isStillMe()) return;
-    if(snap.val()===true){ if(dataLoaded) setSyncStatus('saved'); }
+  db.ref('.info/connected').on('value', function(snap) {
+    if (!isStillMe()) return;
+    if (snap.val() === true) { if (dataLoaded) setSyncStatus('saved'); }
     else { setSyncStatus('offline'); }
   });
 }
  
-function stopListeners(){
-  // Detach every listener by calling .off() with no args — removes ALL handlers on that ref
-  for(var i=0;i<dbListeners.length;i++){
-    try{ dbListeners[i].ref.off(); }catch(e){}
+function stopListeners() {
+  for (var i = 0; i < dbListeners.length; i++) {
+    try { dbListeners[i].ref.off(); } catch(e) {}
   }
   dbListeners = [];
 }
  
-function renderRosterIfActive(){
-  var rosterPanel = document.getElementById('pr');
-  if(rosterPanel && rosterPanel.classList.contains('active')) renderRoster();
+function renderRosterIfActive() {
+  var p = document.getElementById('pr');
+  if (p && p.classList.contains('active')) renderRoster();
 }
  
-// ═══════════════════════════════════════════
-// SAVE FUNCTIONS — handled above with offline support
-// ═══════════════════════════════════════════
+// ── SAVE FUNCTIONS ────────────────────────────────────────────────────
+function saveStudents() {
+  if (!dataLoaded || !currentUser) return;
+  if (isOfflineMode) { cacheLocally(); setSyncStatus('saved'); return; }
+  setSyncStatus('saving');
+  var key = curGroup === 'morning' ? 'students_morning' : 'students_evening';
+  dbRef(key).set(getStudents())
+    .then(function() { setSyncStatus('saved'); cacheLocally(); })
+    .catch(function(e) { setSyncStatus('offline'); console.error(e); });
+}
  
-function cacheLocally(){
-  if(!currentUser) return;
-  try{
-    localStorage.setItem('hsp_'+currentUser.uid, JSON.stringify({
-      sm:studentsMorning, se:studentsEvening, h:history, r:roster,
-      hn:document.getElementById('hName').value,
-      ho:document.getElementById('hNo').value,
-      sn:document.getElementById('supName').value
+function saveDay(sessionK) {
+  if (!dataLoaded || !currentUser) return;
+  if (isOfflineMode) { cacheLocally(); return; }
+  setSyncStatus('saving');
+  var dayData = history[sessionK] || {};
+  var dbKey = sessionK.replace(/^(\d{4})-(\d{2})-(\d{2})_/, '$1_$2_$3_');
+  dbRef('history/' + dbKey).set(dayData)
+    .then(function() { setSyncStatus('saved'); cacheLocally(); })
+    .catch(function(e) { setSyncStatus('offline'); console.error(e); });
+}
+ 
+function saveRoster() {
+  if (!dataLoaded || !currentUser) return;
+  if (isOfflineMode) { cacheLocally(); return; }
+  setSyncStatus('saving');
+  dbRef('roster').set(roster)
+    .then(function() { setSyncStatus('saved'); cacheLocally(); })
+    .catch(function(e) { setSyncStatus('offline'); console.error(e); });
+}
+ 
+function saveSettings() {
+  if (!currentUser) return;
+  if (isOfflineMode) { cacheLocally(); return; }
+  var s = {
+    hospitalName:   document.getElementById('hName').value || '',
+    hospitalNo:     document.getElementById('hNo').value || '',
+    supervisorName: document.getElementById('supName').value || ''
+  };
+  dbRef('settings').set(s)
+    .then(function() { setSyncStatus('saved'); })
+    .catch(function(e) { setSyncStatus('offline'); });
+}
+ 
+function cacheLocally() {
+  if (!currentUser) return;
+  try {
+    localStorage.setItem('hsp_' + currentUser.uid, JSON.stringify({
+      sm: studentsMorning, se: studentsEvening, h: history, r: roster,
+      hn: document.getElementById('hName').value,
+      ho: document.getElementById('hNo').value,
+      sn: document.getElementById('supName').value
     }));
-  }catch(e){}
+  } catch(e) {}
 }
  
 // ═══════════════════════════════════════════
@@ -1346,23 +1395,21 @@ function renderHist(){
   el.innerHTML=html;
 }
  
-var ddDateKey = '';
 function openDayDetail(date){
-  ddDateKey = date;
   var dayData=history[date]||{};
   var dnames=['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  var dobj=new Date(date+'T00:00:00');
   var isM2=date.indexOf('_morning')>=0, grpT=isM2?'صباحي':'مسائي', cleanD2=date.replace('_morning','').replace('_evening',''), dobj2=new Date(cleanD2+'T00:00:00');
-  var ddStsList = isM2 ? studentsMorning : studentsEvening;
   document.getElementById('dmTitle').textContent='تفاصيل يوم: '+cleanD2+' — '+dnames[dobj2.getDay()]+' ('+grpT+')';
   var html='';
-  for(var i=0;i<ddStsList.length;i++){
+  for(var i=0;i<students.length;i++){
     var r=dayData[i]||{}, sc=r.scores||{};
     var att=r.attendance==='present'?'حاضر ✓':r.attendance==='absent'?'غائب ✗':'—';
     var attColor=r.attendance==='present'?'var(--success)':r.attendance==='absent'?'var(--danger)':'var(--muted)';
     var pd=r.paperDelivered===true?'سلّم ✓':r.paperDelivered===false?'لم يسلّم ✗':'—';
     var pdColor=r.paperDelivered===true?'var(--success)':r.paperDelivered===false?'var(--danger)':'var(--muted)';
     html+='<div class="dm-student-card"><div class="dm-st-hdr">';
-    html+='<div class="dm-st-name">'+(i+1)+'. '+ddStsList[i].name+'</div>';
+    html+='<div class="dm-st-name">'+(i+1)+'. '+ddSts[i].name+'</div>';
     html+='<div class="dm-st-meta"><span style="font-size:13px;font-weight:600;color:'+attColor+'">'+att+'</span>';
     html+='<span style="font-size:13px;font-weight:600;color:'+pdColor+'">'+pd+'</span>';
     if(r.total!==undefined) html+='<span class="dm-score-big">'+r.total.toFixed(2)+' / 15</span>';
@@ -1395,18 +1442,15 @@ function openStudentDetail(date,idx){
 function exportDayExcel(){
   var title=document.getElementById('dmTitle').textContent;
   var date=title.replace('تفاصيل يوم: ','').split(' — ')[0].trim();
-  // Determine which group's students to use based on the full history key stored in ddDateKey
-  var histKey = typeof ddDateKey !== 'undefined' ? ddDateKey : (date+'_'+(date.indexOf('_morning')>=0?'morning':'evening'));
-  var dayData=history[histKey]||{};
-  var ddStsList = histKey.indexOf('_morning')>=0 ? studentsMorning : studentsEvening;
+  var dayData=history[date]||{};
   var wb=XLSX.utils.book_new();
   var hN=document.getElementById('hName').value||'', sup=document.getElementById('supName').value||'';
   var rows=[['المشرف: '+sup,'المستشفى: '+hN,'التاريخ: '+date],[],['م','اسم الطالب','الحضور','الملاحظة اليومية','م.جماعية','م.حالة','الطاقم','الطالب','المعلم','المريض','التأخر','الاجتماع','الموقع','الأوامر','الشارة','الحجاب','الزي','المعطف','المجموع','تسليم الورقة','ملاحظات']];
-  for(var i=0;i<ddStsList.length;i++){
+  for(var i=0;i<students.length;i++){
     var r=dayData[i]||{}, sc=r.scores||{};
     var att=r.attendance==='present'?'حاضر':r.attendance==='absent'?'غائب':'—';
     var pd=r.paperDelivered===true?'سلّم':r.paperDelivered===false?'لم يسلّم':'—';
-    rows.push([i+1,ddStsList[i].name,att,sc.dailynote||0,sc.gdisc||0,sc.cdisc||0,sc.staff||0,sc.std||0,sc.tchr||0,sc.pat||0,sc.late||0,sc.meet||0,sc.loc||0,sc.ord||0,sc.badge||0,sc.veil||0,sc.uni||0,sc.coat||0,r.total!==undefined?r.total.toFixed(2):0,pd,r.notes||'']);
+    rows.push([i+1,sts[i].name,att,sc.dailynote||0,sc.gdisc||0,sc.cdisc||0,sc.staff||0,sc.std||0,sc.tchr||0,sc.pat||0,sc.late||0,sc.meet||0,sc.loc||0,sc.ord||0,sc.badge||0,sc.veil||0,sc.uni||0,sc.coat||0,r.total!==undefined?r.total.toFixed(2):0,pd,r.notes||'']);
   }
   var ws=XLSX.utils.aoa_to_sheet(rows); XLSX.utils.book_append_sheet(wb,ws,'تقييم '+date);
   XLSX.writeFile(wb,'تقييم_'+date+'.xlsx'); toast('تم تصدير Excel ✓');
@@ -1445,7 +1489,7 @@ function doExcel(){
     var rec=day[i]||{}, sc=rec.scores||{};
     var att=rec.attendance==='present'?'حاضر':rec.attendance==='absent'?'غائب':'—';
     var pd=rec.paperDelivered===true?'سلّم':rec.paperDelivered===false?'لم يسلّم':'—';
-    rows.push([i+1,sts[i].name,att,sc.dailynote||0,sc.gdisc||0,sc.cdisc||0,sc.staff||0,sc.std||0,sc.tchr||0,sc.pat||0,sc.late||0,sc.meet||0,sc.loc||0,sc.ord||0,sc.badge||0,sc.veil||0,sc.uni||0,sc.coat||0,rec.total!==undefined?rec.total.toFixed(2):0,pd,rec.notes||'']);
+    rows.push([i+1,students[i].name,att,sc.dailynote||0,sc.gdisc||0,sc.cdisc||0,sc.staff||0,sc.std||0,sc.tchr||0,sc.pat||0,sc.late||0,sc.meet||0,sc.loc||0,sc.ord||0,sc.badge||0,sc.veil||0,sc.uni||0,sc.coat||0,rec.total!==undefined?rec.total.toFixed(2):0,pd,rec.notes||'']);
   }
   var ws=XLSX.utils.aoa_to_sheet(rows); XLSX.utils.book_append_sheet(wb,ws,'التقييم اليومي');
   XLSX.writeFile(wb,'تقييم_'+curDate+'.xlsx'); toast('تم تصدير Excel ✓');
@@ -1626,9 +1670,9 @@ function printAttSheet(){
   win.document.close();
 }
  
-tick(); setInterval(tick,1000);
-initConnectivityCheck();
  
+tick(); setInterval(tick, 1000);
+initConnectivityCheck();
 </script>
 </body>
 </html>
