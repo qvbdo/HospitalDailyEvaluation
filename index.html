@@ -919,6 +919,7 @@ function enterOfflineModeWithUid(uid) {
   setSyncStatus('offline');
   renderList();
   document.getElementById('clrRBtn').style.display = (roster && roster.length > 0) ? '' : 'none';
+  dbLoad(); // Load student database from localStorage
 }
  
 // ── RECONNECT (offline → back to login) ───────────────────────────────
@@ -945,6 +946,7 @@ function startListeners() {
       dataLoaded = true; setSyncStatus('saved'); renderList();
       document.getElementById('clrRBtn').style.display = (roster && roster.length > 0) ? '' : 'none';
       cacheLocally();
+      dbLoad(); // Load student DB from localStorage (separate from Firebase)
     }
   }
  
@@ -1928,7 +1930,19 @@ function dbRender(){
   var clearBtn=document.getElementById('dbClearBtn');
  
   if(!studentDb||!studentDb.length){
-    cont.innerHTML='<div style="text-align:center;padding:48px 20px;color:var(--muted)"><div style="font-size:44px;margin-bottom:10px">🗄️</div><div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">لا توجد قاعدة بيانات بعد</div><div style="font-size:13px;margin-bottom:16px">حمّل القالب من زر "تحميل القالب" أعلاه، عبّئه بالبيانات، ثم ارفعه</div><button class="btn bp" onclick="dlDbTemplate()">📥 تحميل القالب أولاً</button></div>';
+    cont.innerHTML='<div style="background:#eaf4ff;border:2px dashed #2980b9;border-radius:12px;padding:28px 20px;text-align:center">'
+      +'<div style="font-size:40px;margin-bottom:10px">📋</div>'
+      +'<div style="font-size:15px;font-weight:700;color:var(--primary);margin-bottom:8px">لا توجد قاعدة بيانات بعد</div>'
+      +'<div style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.7">'
+      +'الخطوة 1: اضغط <strong>📥 تحميل القالب</strong> لتنزيل ملف Excel<br>'
+      +'الخطوة 2: عبّئ بيانات طلابك في الملف<br>'
+      +'الخطوة 3: اضغط <strong>📂 رفع Excel</strong> لاستيراد البيانات'
+      +'</div>'
+      +'<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">'
+      +'<button class="btn bp" style="padding:10px 20px;font-size:14px" onclick="dlDbTemplate()">📥 تحميل القالب</button>'
+      +'<button class="btn" style="background:#27ae60;color:#fff;padding:10px 20px;font-size:14px" onclick="document.getElementById(\'dbFileInput\').click()">📂 رفع Excel</button>'
+      +'</div>'
+      +'</div>';
     statsRow.style.display='none'; filtersRow.style.display='none';
     applyBtn.style.display='none'; clearBtn.style.display='none'; return;
   }
