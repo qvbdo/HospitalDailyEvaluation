@@ -510,6 +510,8 @@ body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);
           </div>
         </div>
         <div id="histList"></div>
+      </div>
+ 
       <!-- TAB: STUDENT DATABASE -->
       <div class="tab-panel" id="pdb">
  
@@ -540,7 +542,7 @@ body{font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);
         </div>
  
         <!-- Filters — hidden until data loaded -->
-        <div id="dbFiltersRow" style="display:none;background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;display:none">
+        <div id="dbFiltersRow" style="display:none;background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;margin-bottom:14px">
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <input type="text" id="dbSearch" class="sbox" placeholder="🔍 ابحث باسم أو مستشفى أو منطقة..." oninput="dbRender()" style="flex:1;min-width:160px">
             <select class="rsel" id="dbFH" onchange="dbRender()"><option value="">كل المستشفيات</option></select>
