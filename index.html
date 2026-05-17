@@ -1779,6 +1779,7 @@ function printAttSheet(){
  
  
 tick(); setInterval(tick, 1000);
+loadStudentDbLocal();
 initConnectivityCheck();
  
  
@@ -1788,15 +1789,15 @@ initConnectivityCheck();
 // ═══════════════════════════════════════════
  
 function saveStudentDb(){
-  if(typeof saveAll === 'function'){
-    // Save to Firebase/localStorage alongside other data
-    if(currentUser && typeof dbRef === 'function' && dbRef('studentDb')){
-      setSyncStatus('saving');
-      dbRef('studentDb').set(studentDb)
-        .then(function(){ setSyncStatus('saved'); })
-        .catch(function(){ setSyncStatus('offline'); localSaveDb(); });
-    } else { localSaveDb(); }
-  } else { localSaveDb(); }
+  // Always save locally first (works in both online and offline mode)
+  localSaveDb();
+  // Also push to Firebase if available and connected
+  try{
+    var ref = (typeof dbRef==='function') ? dbRef('studentDb') : null;
+    if(ref && typeof ref.set === 'function'){
+      ref.set(studentDb).catch(function(e){ console.warn('DB Firebase save failed',e); });
+    }
+  }catch(e){ /* Firebase not available — local save is enough */ }
 }
  
 function localSaveDb(){
